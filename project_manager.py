@@ -114,6 +114,28 @@ def save_projects_data(data):
         print(f"Error saving {projects_file}: {e}")
         return False
 
+def upsert_project(proj):
+    """Upsert or sync a full project from client to server database."""
+    if not isinstance(proj, dict):
+        return None
+    data = get_projects_data()
+    pid = proj.get("id") or proj.get("code")
+    pcode = proj.get("code") or pid
+    if not pid:
+        return None
+    found = False
+    for i, p in enumerate(data.get("projects", [])):
+        if p.get("id") == pid or p.get("code") == pcode or str(p.get("code", "")).replace(" ", "-") == str(pcode).replace(" ", "-"):
+            data["projects"][i] = proj
+            found = True
+            break
+    if not found:
+        data.setdefault("projects", []).append(proj)
+    data["active_project_id"] = pid
+    proj["updated_at"] = _get_timestamp()
+    save_projects_data(data)
+    return proj
+
 def list_projects():
     data = get_projects_data()
     projects_summary = []
