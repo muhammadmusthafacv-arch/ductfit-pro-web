@@ -3,12 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DuctFit Pro v{{ version|default('1.0.5') }} - ASHRAE Fundamentals (Ch. 21)</title>
+    <title>DuctFit Pro v{{ version|default('1.0.15') }} - ASHRAE Fundamentals (Ch. 21)</title>
     <link rel="icon" type="image/x-icon" href="/static/icon.ico">
     <link rel="stylesheet" href="/static/css/style.css?v=1.0.12_archive">
     <link rel="stylesheet" href="/static/katex/katex.min.css">
+        <style id="hide-netlify-hud">
+        #nl-badge-frame,
+        #nl-hud-frame,
+        iframe[title*="Netlify"],
+        iframe[title*="Powered by Netlify"],
+        [data-netlify-drawer],
+        netlify-drawer,
+        #netlify-badge,
+        .netlify-badge {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+        }
+    </style>
+    <script>
+        try {
+            localStorage.setItem("nl-hud:public:v1", "hidden");
+            localStorage.setItem("nl-hud:owner-private:v1", "hidden");
+        } catch(e) {}
+        (function() {
+            const kill = () => {
+                document.querySelectorAll('#nl-badge-frame, #nl-hud-frame, iframe[title*="Netlify"]').forEach(el => {
+                    if (el.tagName === 'IFRAME') el.remove();
+                });
+            };
+            kill();
+            document.addEventListener('DOMContentLoaded', () => {
+                kill();
+                if (!document.getElementById("nl-badge-frame")) {
+                    const dummy = document.createElement("div");
+                    dummy.id = "nl-badge-frame";
+                    dummy.style.display = "none";
+                    document.body.appendChild(dummy);
+                }
+            });
+            window.addEventListener('load', kill);
+            if (typeof MutationObserver !== 'undefined') {
+                new MutationObserver((mutations) => {
+                    for (const m of mutations) {
+                        for (const node of m.addedNodes) {
+                            if (node.nodeType === 1 && (node.id === 'nl-badge-frame' || node.id === 'nl-hud-frame' || (node.title && node.title.includes('Netlify')))) {
+                                if (node.tagName === 'IFRAME') node.remove();
+                            }
+                        }
+                    }
+                }).observe(document.documentElement, { childList: true, subtree: true });
+            }
+        })();
+    </script>
 </head>
 <body>
+    <!-- Neutralize Netlify HUD & Badge Injection -->
+    <div id="nl-badge-frame" style="display:none!important;visibility:hidden!important;width:0!important;height:0!important;position:fixed!important;left:-9999px!important;"></div>
+    <div id="nl-hud-frame" style="display:none!important;visibility:hidden!important;width:0!important;height:0!important;position:fixed!important;left:-9999px!important;"></div>
 
     <div class="app-layout">
         <!-- LEFT COLUMN: Authentic Windows Explorer Tree Browser -->
@@ -30,7 +88,7 @@
                     </button>
                 </div>
                 <div class="tree-action-bar" style="margin-top: 4px;">
-                    <a href="/api/catalog/pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnDownloadCatalogPdf" class="tree-mini-btn btn-catalog-pdf" title="Download Master ASHRAE Catalog PDF (Complete 62-page report for all 234 fittings &amp; process flow architecture)" style="text-decoration: none; background: #0284c7; color: #ffffff; border-color: #0369a1; font-weight: 700; width: 100%;">
+                    <a href="/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnDownloadCatalogPdf" class="tree-mini-btn btn-catalog-pdf" title="Download Master ASHRAE Catalog PDF (Complete 62-page report for all 234 fittings &amp; process flow architecture)" style="text-decoration: none; background: #0284c7; color: #ffffff; border-color: #0369a1; font-weight: 700; width: 100%;">
                         <span class="btn-icon">📥</span> Export Master Catalog PDF (234 Fittings)
                     </a>
                 </div>
@@ -47,7 +105,7 @@
             </div>
 
             <div class="sidebar-footer" style="display: flex; justify-content: space-between; align-items: center;">
-                <a href="/api/catalog/pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnSidebarMasterPdf" style="color: #0284c7; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Download Master ASHRAE Catalog PDF">
+                <a href="/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnSidebarMasterPdf" style="color: #0284c7; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Download Master ASHRAE Catalog PDF">
                     <span>📄</span> Master PDF
                 </a>
                 <span id="catalogItemCount">234 Fittings Available</span>
@@ -401,7 +459,7 @@
                                 <span>Display Values in Drawing</span>
                             </label>
                         </div>
-                        <div class="footer-right" id="footerVersion">DuctFit Pro Version {{ version|default('1.0.5') }} &bull; ASHRAE Fundamentals (Ch. 21)</div>
+                        <div class="footer-right" id="footerVersion">DuctFit Pro Version 1.0.15 &bull; ASHRAE Fundamentals (Ch. 21)</div>
                     </div>
                 </div>
             </div>
@@ -1374,7 +1432,11 @@
 
     <script src="/static/katex/katex.min.js"></script>
     <script src="/static/katex/auto-render.min.js"></script>
-    <script src="/static/js/app.js?v=1.0.12_archive"></script>
+    <script src="/static/js/ashrae_compiled_database.js?v=1.0.15"></script>
+    <script src="/static/js/ashrae_engine_runner.js?v=1.0.15"></script>
+    <script src="/static/js/html2pdf.bundle.min.js"></script>
+    <script src="/static/js/pdf_report.js?v=1.0.15"></script>
+    <script src="/static/js/app.js?v=1.0.15"></script>
     <script>
         // Dynamically ensure version strictly matches Electron package/app version
         if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
