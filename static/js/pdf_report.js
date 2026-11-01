@@ -70,12 +70,13 @@
             if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
             return new Promise(resolve => {
                 const timer = setTimeout(() => {
+                    try { if (img.parentNode) img.parentNode.removeChild(img); } catch (e) {}
                     resolve();
-                }, 3000);
+                }, 2000);
                 img.onload = () => { clearTimeout(timer); resolve(); };
                 img.onerror = () => {
                     clearTimeout(timer);
-                    img.style.display = "none";
+                    try { if (img.parentNode) img.parentNode.removeChild(img); } catch (e) {}
                     resolve();
                 };
             });
@@ -559,7 +560,7 @@
                         </div>
 
                         <div class="pdf-diagram-container">
-                            <img src="/static/diagrams/${encodeURIComponent(fit.code)}.png" alt="${escapeHtml(fit.code)}" />
+                            <img src="/static/blueprints/${encodeURIComponent(fit.code)}.png" alt="${escapeHtml(fit.code)}" />
                         </div>
 
                         <div class="pdf-io-grid">
@@ -1034,7 +1035,7 @@
                 </table>
 
                 <div class="pdf-diagram-container">
-                    <img src="/static/diagrams/${encodeURIComponent(code)}.png" alt="${escapeHtml(code)}" />
+                    <img src="/static/blueprints/${encodeURIComponent(code)}.png" alt="${escapeHtml(code)}" />
                 </div>
 
                 <div style="font-size:10px;font-weight:700;color:#0f172a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;">
@@ -1075,12 +1076,14 @@
         const stage = document.createElement("div");
         stage.id = "ductfit-pdf-render-stage-" + Date.now();
         stage.style.position = "fixed";
-        stage.style.left = "-9999px";
+        stage.style.left = "0";
         stage.style.top = "0";
         stage.style.width = "794px";
+        stage.style.opacity = "0.01";
+        stage.style.pointerEvents = "none";
         stage.style.background = "#ffffff";
         stage.style.color = "#0f172a";
-        stage.style.zIndex = "-9999";
+        stage.style.zIndex = "-100";
         stage.innerHTML = html;
         document.body.appendChild(stage);
 

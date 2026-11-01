@@ -2719,34 +2719,41 @@ try {
             air_condition_id: state.selectedAirConditionId || "comfort_return"
         };
 
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+
         let calculatedSuccessfully = false;
-        try {
-            const resp = await fetch("/api/calculate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            if (resp.ok) {
-                const res = await resp.json();
-                if (res.status === "success") {
-                    if (payload.mode !== state.mode || payload.code !== state.activeCode) {
-                        return;
+        if (!isStaticWeb) {
+            try {
+                const resp = await fetch("/api/calculate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                if (resp.ok) {
+                    const res = await resp.json();
+                    if (res.status === "success") {
+                        if (payload.mode !== state.mode || payload.code !== state.activeCode) {
+                            return;
+                        }
+                        state.activeData = res.data;
+                        renderOutputs(res.data);
+                        renderFormulas(res.data.steps || []);
+                        renderCadDrawing();
+                        updateFsHud();
+                        calculatedSuccessfully = true;
                     }
-                    state.activeData = res.data;
-                    renderOutputs(res.data);
-                    renderFormulas(res.data.steps || []);
-                    renderCadDrawing();
-                    updateFsHud();
-                    calculatedSuccessfully = true;
                 }
+            } catch (err) {
+                console.warn("Server calculate unavailable, switching to client calculation:", err);
             }
-        } catch (err) {
-            console.warn("Server calculate unavailable, switching to client calculation:", err);
         }
 
         if (!calculatedSuccessfully) {
             const clientData = runClientSideCalculation(payload);
             if (clientData) {
+                if (payload.mode !== state.mode || payload.code !== state.activeCode) {
+                    return;
+                }
                 state.activeData = clientData;
                 renderOutputs(clientData);
                 renderFormulas(clientData.steps || []);
@@ -5167,6 +5174,14 @@ try {
             };
         }
 
+        if (typeof window.AshraeOfficialEngineJS !== "undefined") {
+            try {
+                return window.AshraeOfficialEngineJS.calculate(payload);
+            } catch (err) {
+                console.error("AshraeOfficialEngineJS error for", code, err);
+            }
+        }
+
         const H = parseFloat(inputs.H) || (isSI ? 225 : 9);
         const W = parseFloat(inputs.W) || (isSI ? 225 : 9);
         const D = parseFloat(inputs.D) || (isSI ? 250 : 10);
@@ -5407,23 +5422,27 @@ try {
 
     async function fetchActiveProjectDetails(projectId) {
         if (!projectId) return;
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
         let fetched = false;
-        try {
-            const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
-            if (resp.ok) {
-                const res = await resp.json();
-                if (res.status === "success" && res.data) {
-                    state.activeProject = res.data;
-                    state.activeProjectId = res.data.id;
-                    updateProjectRibbonSnippet(res.data);
-                    fetched = true;
+        if (!isStaticWeb) {
+            try {
+                const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+                if (resp.ok) {
+                    const res = await resp.json().catch(() => null);
+                    if (res && res.status === "success" && res.data) {
+                        state.activeProject = res.data;
+                        state.activeProjectId = res.data.id;
+                        updateProjectRibbonSnippet(res.data);
+                        fetched = true;
+                    }
                 }
-            }
-        } catch (err) {}
+            } catch (err) {}
+        }
 
         if (!fetched) {
-            const localData = WebStorage.load();
-            const proj = localData.projects.find(p => p.id === projectId) || state.projects.find(p => p.id === projectId);
+            const localData = (typeof WebStorage !== "undefined") ? WebStorage.load() : { projects: [] };
+            const proj = (localData.projects && localData.projects.find(p => p.id === projectId)) || 
+                         (state.projects && state.projects.find(p => p.id === projectId));
             if (proj) {
                 state.activeProject = proj;
                 state.activeProjectId = proj.id;
@@ -5476,25 +5495,34 @@ try {
 
     async function switchActiveProject(projectId) {
         if (!projectId) return;
-        try {
-            const resp = await fetch("/api/projects/select", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: projectId })
-            });
-            const res = await resp.json();
-            if (res.status === "success") {
-                state.activeProjectId = projectId;
-                await fetchActiveProjectDetails(projectId);
-                renderProjectDropdown();
-                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        if (!isStaticWeb) {
+            try {
+                const resp = await fetch("/api/projects/select", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: projectId })
+                });
+                if (resp.ok) {
+                    await resp.json().catch(() => null);
                 }
-                showPrjToast(`📁 Active Project switched to: ${state.activeProject ? state.activeProject.name : projectId}`);
+            } catch (err) {
+                console.warn("Server unavailable for select project, switching locally:", err);
             }
-        } catch (err) {
-            console.error("Failed to select project:", err);
         }
+
+        state.activeProjectId = projectId;
+        if (typeof WebStorage !== "undefined") {
+            const store = WebStorage.load();
+            store.active_project_id = projectId;
+            WebStorage.save(store);
+        }
+        await fetchActiveProjectDetails(projectId);
+        renderProjectDropdown();
+        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+        }
+        showPrjToast(`Active Project switched to: ${state.activeProject ? state.activeProject.name : projectId}`);
     }
 
     // --- All Projects Management (View, Search, Edit, Delete) ---
@@ -5625,7 +5653,7 @@ try {
     async function downloadProjectArchive(projectId) {
         const pid = projectId || state.activeProjectId;
         if (!pid) {
-            showPrjToast("⚠️ Please select an active project first.");
+            showPrjToast("Please select an active project first.");
             return;
         }
         const prj = (state.projects && state.projects.find(p => p.id === pid)) || state.activeProject;
@@ -5635,16 +5663,30 @@ try {
         const cleanName = String(prjName).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
         const defaultFilename = `${cleanCode}_${cleanName}.dfp`;
 
+        const p = prj || (state.projects && state.projects.find(x => x.id === pid)) || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
+        const clientArchiveJson = JSON.stringify({
+            archive_version: "1.0",
+            exported_at: new Date().toISOString(),
+            application: "DuctFit Pro",
+            project: p
+        }, null, 2);
+
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+
         // Priority 1: Native Electron Desktop Save Dialog
         if (window.electronAPI && typeof window.electronAPI.saveProjectFile === "function") {
             try {
-                showPrjToast(`📦 Generating project archive for "${cleanCode}"...`);
-                const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                if (!resp.ok) {
-                    showPrjToast("❌ Failed to fetch project archive from server.");
-                    return;
+                showPrjToast(`Generating project archive for "${cleanCode}"...`);
+                let archiveJson = clientArchiveJson;
+                if (!isStaticWeb) {
+                    try {
+                        const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
+                        if (resp.ok) {
+                            const txt = await resp.text();
+                            if (txt && txt.trim().startsWith("{")) archiveJson = txt;
+                        }
+                    } catch (e) {}
                 }
-                const archiveJson = await resp.text();
                 const result = await window.electronAPI.saveProjectFile({
                     defaultPath: defaultFilename,
                     filters: [
@@ -5656,19 +5698,20 @@ try {
                 });
 
                 if (result && result.success) {
-                    showPrjToast(`✅ Archive saved successfully to:\n${result.filePath}`);
+                    showPrjToast(`Archive saved successfully to:
+${result.filePath}`);
                 } else if (result && result.error) {
-                    showPrjToast(`❌ Failed to save file: ${result.error}`);
+                    showPrjToast(`Failed to save file: ${result.error}`);
                 }
                 return;
             } catch (err) {
                 console.error("Electron archive save error:", err);
-                showPrjToast(`❌ Error saving archive: ${err.message}`);
+                showPrjToast(`Error saving archive: ${err.message}`);
                 return;
             }
         }
 
-        // Priority 2: Modern Browser File System Access API (Prompts native Save As dialog directly)
+        // Priority 2: Modern Browser File System Access API
         if (typeof window.showSaveFilePicker === "function") {
             try {
                 const fileHandle = await window.showSaveFilePicker({
@@ -5679,45 +5722,40 @@ try {
                     }]
                 });
 
-                showPrjToast(`💾 Generating archive "${defaultFilename}"...`);
-                const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                if (!resp.ok) {
-                    showPrjToast("❌ Failed to fetch project archive from server.");
-                    return;
+                showPrjToast(`Generating archive "${defaultFilename}"...`);
+                let archiveJson = clientArchiveJson;
+                if (!isStaticWeb) {
+                    try {
+                        const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
+                        if (resp.ok) {
+                            const txt = await resp.text();
+                            if (txt && txt.trim().startsWith("{")) archiveJson = txt;
+                        }
+                    } catch (e) {}
                 }
-                const archiveJson = await resp.text();
                 const writable = await fileHandle.createWritable();
                 await writable.write(archiveJson);
                 await writable.close();
-                showPrjToast(`✅ Project archive saved: ${defaultFilename}`);
+                showPrjToast(`Project archive saved: ${defaultFilename}`);
                 return;
             } catch (pickerErr) {
-                if (pickerErr && pickerErr.name === "AbortError") {
-                    // User canceled the Save dialog
-                    return;
-                }
-                console.warn("showSaveFilePicker not permitted or failed, falling back to direct download:", pickerErr);
-                // Fall through to standard download fallback
+                if (pickerErr && pickerErr.name === "AbortError") return;
+                console.warn("showSaveFilePicker error, falling back to direct download:", pickerErr);
             }
         }
 
-        // Priority 3: Fallback Standard Browser Download (Triggers browser download manager / Save As)
+        // Priority 3: Fallback Standard Browser Download
         try {
-            showPrjToast(`📦 Downloading archive "${defaultFilename}"...`);
-            let archiveJson = null;
-            try {
-                const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                if (resp.ok) archiveJson = await resp.text();
-            } catch (e) {}
-
-            if (!archiveJson) {
-                const p = prj || (state.projects && state.projects.find(x => x.id === pid)) || WebStorage.getActiveProject();
-                archiveJson = JSON.stringify({
-                    archive_version: "1.0",
-                    exported_at: new Date().toISOString(),
-                    application: "DuctFit Pro",
-                    project: p
-                }, null, 2);
+            showPrjToast(`Downloading archive "${defaultFilename}"...`);
+            let archiveJson = clientArchiveJson;
+            if (!isStaticWeb) {
+                try {
+                    const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
+                    if (resp.ok) {
+                        const txt = await resp.text();
+                        if (txt && txt.trim().startsWith("{")) archiveJson = txt;
+                    }
+                } catch (e) {}
             }
 
             const blob = new Blob([archiveJson], { type: "application/json" });
@@ -5729,7 +5767,7 @@ try {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(blobUrl);
-            showPrjToast(`✅ Project archive downloaded: ${defaultFilename}`);
+            showPrjToast(`Project archive downloaded: ${defaultFilename}`);
         } catch (downloadErr) {
             console.error("Standard download error:", downloadErr);
         }
@@ -5756,9 +5794,12 @@ try {
 
     async function processArchiveText(text) {
         try {
-            showToastNotification("📥 Inspecting project archive...", 2000);
+            showToastNotification("Inspecting project archive...", 2000);
             let archiveData;
             try {
+                if (!text || typeof text !== "string" || !text.trim().startsWith("{")) {
+                    throw new Error("Invalid archive file format (not JSON).");
+                }
                 archiveData = JSON.parse(text);
             } catch (err) {
                 showToastNotification("❌ Invalid archive file. Content must be valid JSON.", 4000);
@@ -6109,31 +6150,36 @@ try {
             created_at: new Date().toISOString()
         };
 
-        try {
-            const resp = await fetch("/api/projects", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code: code,
-                    name: name,
-                    client: client,
-                    contractor: contractor,
-                    subcontractor: subcontractor,
-                    notes: notes,
-                    unit_system: state.unit
-                })
-            });
-            if (resp.ok) {
-                const res = await resp.json();
-                if (res.status === "success" && res.data && res.data.id) {
-                    newPrj.id = res.data.id;
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        if (!isStaticWeb) {
+            try {
+                const resp = await fetch("/api/projects", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        code: code,
+                        name: name,
+                        client: client,
+                        contractor: contractor,
+                        subcontractor: subcontractor,
+                        notes: notes,
+                        unit_system: state.unit
+                    })
+                });
+                if (resp.ok) {
+                    const res = await resp.json().catch(() => null);
+                    if (res && res.status === "success" && res.data && res.data.id) {
+                        newPrj.id = res.data.id;
+                    }
                 }
+            } catch (err) {
+                console.warn("Server unavailable for new project, storing in browser local storage:", err);
             }
-        } catch (err) {
-            console.warn("Server unavailable for new project, storing in browser local storage:", err);
         }
 
-        WebStorage.createProject(newPrj);
+        if (typeof WebStorage !== "undefined") {
+            WebStorage.createProject(newPrj);
+        }
         state.projects = WebStorage.load().projects;
         state.activeProjectId = newPrj.id;
         state.activeProject = newPrj;
@@ -8388,10 +8434,22 @@ try {
         }
 
         // Server fallback if running with Python backend
-        if (isSizer) {
-            window.location.href = `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        if (!isStaticWeb) {
+            if (isSizer) {
+                window.location.href = `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+            } else {
+                window.location.href = `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+            }
         } else {
-            window.location.href = `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+            // Static web fallback: trigger print preview
+            if (typeof window.DuctFitPdfReport !== "undefined") {
+                if (isSizer) {
+                    window.DuctFitPdfReport.printSizerReport(prj, { includeCalcs: includeCalcs === "1", margin: marginVal });
+                } else {
+                    window.DuctFitPdfReport.printFittingReport(prj, { includeCalcs: includeCalcs === "1", margin: marginVal });
+                }
+            }
         }
     }
 

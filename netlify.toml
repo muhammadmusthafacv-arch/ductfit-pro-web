@@ -8,6 +8,13 @@
   status = 200
   force = true
 
+# Fallback for blueprint diagrams
+[[redirects]]
+  from = "/static/diagrams/*"
+  to = "/static/blueprints/:splat"
+  status = 200
+  force = true
+
 # Master Catalog PDF Export
 [[redirects]]
   from = "/api/catalog/pdf"

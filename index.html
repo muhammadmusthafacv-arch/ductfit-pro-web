@@ -64,6 +64,9 @@
     </script>
 </head>
 <body>
+    <!-- Neutralize Netlify HUD & Badge Injection -->
+    <div id="nl-badge-frame" style="display:none!important;visibility:hidden!important;width:0!important;height:0!important;position:fixed!important;left:-9999px!important;"></div>
+    <div id="nl-hud-frame" style="display:none!important;visibility:hidden!important;width:0!important;height:0!important;position:fixed!important;left:-9999px!important;"></div>
 
     <div class="app-layout">
         <!-- LEFT COLUMN: Authentic Windows Explorer Tree Browser -->
@@ -1429,9 +1432,11 @@
 
     <script src="/static/katex/katex.min.js"></script>
     <script src="/static/katex/auto-render.min.js"></script>
+    <script src="/static/js/ashrae_compiled_database.js?v=1.0.15"></script>
+    <script src="/static/js/ashrae_engine_runner.js?v=1.0.15"></script>
     <script src="/static/js/html2pdf.bundle.min.js"></script>
-    <script src="/static/js/pdf_report.js?v=1.0.13"></script>
-    <script src="/static/js/app.js?v=1.0.13_pdf"></script>
+    <script src="/static/js/pdf_report.js?v=1.0.15"></script>
+    <script src="/static/js/app.js?v=1.0.15"></script>
     <script>
         // Dynamically ensure version strictly matches Electron package/app version
         if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
