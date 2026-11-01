@@ -1,0 +1,12 @@
+                 #        #
+  ER5-4  Wye, Symmetrical, Dovetail, Qb/Qc = 0.5, Converging
+         (Idelchik 1986, Diagram 7-24)
+   Ab/Ac       0.5      1.0
+
+      Cb      0.23     0.28
+  ==========================================================
+' Branches are identical, Qb1 = Qb2 = Qb, and Cb1 = Cb2 = Cb
+
+' Rev.  Orig.
+' Date  6/93
+' By:   HFB

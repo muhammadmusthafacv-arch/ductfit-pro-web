@@ -1,7 +1,3 @@
-try {
-    localStorage.setItem("nl-hud:public:v1", "hidden");
-    localStorage.setItem("nl-hud:owner-private:v1", "hidden");
-} catch(e) {}
 /**
  * ASHRAE Duct Fitting Database & Sizer Logic v6.0
  * Authentic reproduction of ASHRAE Database v5.0 / v6.0 + Integrated Duct Sizer
@@ -2547,13 +2543,6 @@ try {
                 steps: state.activeData?.steps || []
             };
 
-            // Use client-side PDF engine on static web / Netlify
-            if (typeof window.DuctFitPdfReport !== "undefined") {
-                await window.DuctFitPdfReport.exportCalculationPdf(payload);
-                showPrjToast("Calculation PDF downloaded successfully!");
-                return;
-            }
-
             const response = await fetch("/api/calculations/pdf", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2574,18 +2563,9 @@ try {
             a.remove();
             window.URL.revokeObjectURL(downloadUrl);
 
-            showPrjToast("Calculation PDF downloaded successfully!");
+            showPrjToast("📄 Calculation PDF downloaded successfully!");
         } catch (err) {
             console.error("Calculation PDF download failed:", err);
-            if (typeof window.DuctFitPdfReport !== "undefined") {
-                try {
-                    await window.DuctFitPdfReport.exportCalculationPdf(payload);
-                    showPrjToast("Calculation PDF downloaded successfully!");
-                    return;
-                } catch (err2) {
-                    console.error("Client fallback calculation PDF failed:", err2);
-                }
-            }
             showPrjToast("Error generating calculation PDF.");
         }
     }
@@ -2599,18 +2579,25 @@ try {
         showPrjToast("Downloading Master ASHRAE Fitting Catalog PDF (234 Fittings)...");
 
         try {
-            const directUrl = "/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
+            const response = await fetch("/api/catalog/pdf");
+            if (!response.ok) {
+                throw new Error("Server returned " + response.status);
+            }
+
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
-            a.href = directUrl;
+            a.href = downloadUrl;
             a.download = "ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
             document.body.appendChild(a);
             a.click();
             a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
 
-            showPrjToast("Master ASHRAE Catalog PDF downloaded successfully!");
+            showPrjToast("📄 Master ASHRAE Catalog PDF downloaded successfully!");
         } catch (err) {
             console.error("Master catalog PDF download failed:", err);
-            window.location.href = "/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
+            window.location.href = "/api/catalog/pdf";
         }
     }
 
@@ -2719,47 +2706,27 @@ try {
             air_condition_id: state.selectedAirConditionId || "comfort_return"
         };
 
-        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
-
-        let calculatedSuccessfully = false;
-        if (!isStaticWeb) {
-            try {
-                const resp = await fetch("/api/calculate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload)
-                });
-                if (resp.ok) {
-                    const res = await resp.json();
-                    if (res.status === "success") {
-                        if (payload.mode !== state.mode || payload.code !== state.activeCode) {
-                            return;
-                        }
-                        state.activeData = res.data;
-                        renderOutputs(res.data);
-                        renderFormulas(res.data.steps || []);
-                        renderCadDrawing();
-                        updateFsHud();
-                        calculatedSuccessfully = true;
-                    }
-                }
-            } catch (err) {
-                console.warn("Server calculate unavailable, switching to client calculation:", err);
-            }
-        }
-
-        if (!calculatedSuccessfully) {
-            const clientData = runClientSideCalculation(payload);
-            if (clientData) {
+        try {
+            const resp = await fetch("/api/calculate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const res = await resp.json();
+            if (res.status === "success") {
                 if (payload.mode !== state.mode || payload.code !== state.activeCode) {
                     return;
                 }
-                state.activeData = clientData;
-                renderOutputs(clientData);
-                renderFormulas(clientData.steps || []);
+                state.activeData = res.data;
+                renderOutputs(res.data);
+                renderFormulas(res.data.steps || []);
                 renderCadDrawing();
                 updateFsHud();
+            } else {
+                console.error("Calculation returned error:", res.message);
             }
+        } catch (err) {
+            console.error("Calculate request failed:", err);
         }
     }
 
@@ -4816,397 +4783,20 @@ try {
     // PROJECT MANAGEMENT & FITTING SCHEDULE (ASHRAE DATABASE MODEL)
     // =========================================================================
 
-    // =========================================================================
-    // CLIENT-SIDE WEB STORAGE & OFFLINE ENGINE (FOR NETLIFY & STANDALONE WEB)
-    // =========================================================================
-    function solveColebrook(Dh_mm, e_mm, V_ms, rho = 1.204, mu = 1.818e-5) {
-        Dh_mm = Math.max(Dh_mm, 1e-3);
-        e_mm = Math.max(e_mm, 1e-6);
-        V_ms = Math.max(V_ms, 1e-3);
-        const Re = (rho * V_ms * (Dh_mm / 1000.0)) / mu;
-        if (Re < 2300) {
-            const f = 64.0 / Math.max(Re, 1e-6);
-            return { f, Re, regime: "Laminar" };
-        }
-        const rel_rough = (e_mm / Dh_mm) / 3.7;
-        let inv_sqrt_f = -2.0 * Math.log10(rel_rough + 5.74 / Math.pow(Re, 0.9));
-        for (let i = 0; i < 20; i++) {
-            const arg = rel_rough + (2.51 * inv_sqrt_f) / Re;
-            if (arg <= 0) break;
-            const F = inv_sqrt_f + 2.0 * Math.log10(arg);
-            const dF = 1.0 + (2.0 / Math.LN10) * (2.51 / Re) / arg;
-            const step = F / dF;
-            inv_sqrt_f -= step;
-            if (Math.abs(step) < 1e-8) break;
-        }
-        const f = 1.0 / (inv_sqrt_f * inv_sqrt_f);
-        return { f, Re, regime: "Turbulent" };
-    }
-
-    const WebStorage = {
-        KEY: "ductfit_pro_projects_v1",
-        ACTIVE_KEY: "ductfit_pro_active_project_id",
-
-        getDefaultData() {
-            return {
-                active_project_id: null,
-                projects: []
-            };
-        },
-
-        load() {
-            try {
-                const raw = localStorage.getItem(this.KEY);
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && Array.isArray(parsed.projects)) {
-                        return parsed;
-                    }
-                }
-            } catch (e) {
-                console.warn("Error reading localStorage:", e);
-            }
-            const initial = this.getDefaultData();
-            this.save(initial);
-            return initial;
-        },
-
-        save(data) {
-            try {
-                localStorage.setItem(this.KEY, JSON.stringify(data));
-                if (data.active_project_id) {
-                    localStorage.setItem(this.ACTIVE_KEY, data.active_project_id);
-                }
-            } catch (e) {
-                console.error("Error saving to localStorage:", e);
-            }
-        },
-
-        getActiveProject() {
-            const data = this.load();
-            const actId = localStorage.getItem(this.ACTIVE_KEY) || data.active_project_id;
-            return data.projects.find(p => p.id === actId) || data.projects[0];
-        },
-
-        updateProject(updatedProj) {
-            const data = this.load();
-            const idx = data.projects.findIndex(p => p.id === updatedProj.id);
-            if (idx >= 0) {
-                data.projects[idx] = updatedProj;
-            } else {
-                data.projects.push(updatedProj);
-            }
-            data.active_project_id = updatedProj.id;
-            this.save(data);
-            return data;
-        },
-
-        createProject(proj) {
-            const data = this.load();
-            if (!proj.id) {
-                proj.id = "PRJ-" + Date.now().toString(36).toUpperCase();
-            }
-            if (!proj.fittings) proj.fittings = [];
-            if (!proj.duct_segments) proj.duct_segments = [];
-            if (!proj.margin_pct) proj.margin_pct = 15;
-            if (!proj.created_at) proj.created_at = new Date().toISOString();
-            data.projects.push(proj);
-            data.active_project_id = proj.id;
-            this.save(data);
-            return proj;
-        },
-
-        deleteProject(projId) {
-            const data = this.load();
-            data.projects = data.projects.filter(p => p.id !== projId);
-            if (data.active_project_id === projId) {
-                data.active_project_id = data.projects.length > 0 ? data.projects[0].id : null;
-            }
-            this.save(data);
-            return data;
-        }
-    };
-
-    function runClientSideCalculation(payload) {
-        const u = payload.unit_system || state.unit || "SI";
-        const isSI = (u === "SI");
-        const inputs = payload.inputs || {};
-        const code = payload.code || state.activeCode || "CR11-1";
-        const isSizer = (payload.mode === "sizer" || code.startsWith("SIZE-"));
-
-        if (isSizer) {
-            const targetType = payload.target_type || "friction";
-            const targetVal = parseFloat(payload.target_val) || (targetType === "velocity" ? (isSI ? 2.5 : 500) : (isSI ? 1.0 : 0.10));
-            const Q = parseFloat(inputs.Q) || (isSI ? 300 : 636);
-            const L = parseFloat(inputs.L) || (isSI ? 1.0 : 10.0);
-            const e = parseFloat(inputs.e || inputs.ei) || (isSI ? 0.090 : 0.0003);
-            const rho = parseFloat(inputs.rho) || (isSI ? 1.204 : 0.075);
-            const mu = isSI ? 1.818e-5 : 0.0432 / 3600;
-
-            const Q_Lps = isSI ? Q : (Q / 2.11888);
-            const L_m = isSI ? L : (L / 3.28084);
-            const e_mm = isSI ? e : (e * 304.8);
-            const rho_si = isSI ? rho : (rho * 16.018463);
-            const targetVal_si = isSI ? targetVal : (targetType === "friction" ? targetVal * (249.0889 / 30.48) : targetVal * 0.00508);
-
-            let D_exact_mm = 0;
-            if (targetType === "velocity") {
-                const A_m2 = (Q_Lps / 1000.0) / Math.max(targetVal_si, 1e-4);
-                D_exact_mm = Math.sqrt(4.0 * A_m2 / Math.PI) * 1000.0;
-            } else {
-                let d_low = 50.0, d_high = 3000.0;
-                for (let iter = 0; iter < 40; iter++) {
-                    const d_mid = 0.5 * (d_low + d_high);
-                    const A = Math.PI * Math.pow(d_mid / 2000.0, 2);
-                    const V = (Q_Lps / 1000.0) / Math.max(A, 1e-6);
-                    const cb = solveColebrook(d_mid, e_mm, V, rho_si);
-                    const pv = 0.5 * rho_si * V * V;
-                    const hf = cb.f * (1000.0 / d_mid) * pv;
-                    if (hf > targetVal_si) d_low = d_mid;
-                    else d_high = d_mid;
-                }
-                D_exact_mm = 0.5 * (d_low + d_high);
-            }
-
-            const stdSizesMm = [100, 125, 150, 160, 180, 200, 224, 250, 280, 300, 315, 350, 355, 400, 450, 500, 560, 630, 710, 800, 900, 1000, 1120, 1200, 1250, 1400, 1600, 1800, 2000];
-            let D_nom_mm = stdSizesMm[0];
-            let minDiff = 999999;
-            for (const sz of stdSizesMm) {
-                const diff = Math.abs(sz - D_exact_mm);
-                if (diff < minDiff) { minDiff = diff; D_nom_mm = sz; }
-            }
-            const D_nom_in = Math.round(D_exact_mm / 25.4);
-
-            const hasH = inputs.H !== undefined && inputs.H > 0;
-            const hasW = inputs.W !== undefined && inputs.W > 0;
-            let fixedType = "NONE", fixedDim = 0;
-            if (payload.last_changed === "W" && hasW) { fixedType = "W"; fixedDim = inputs.W; }
-            else if (hasH) { fixedType = "H"; fixedDim = inputs.H; }
-            else if (hasW) { fixedType = "W"; fixedDim = inputs.W; }
-
-            let H_nom_mm = 300, W_nom_mm = 300;
-            if (fixedType === "H") {
-                H_nom_mm = Math.round(fixedDim);
-                let w_low = 50.0, w_high = 4000.0;
-                for (let i = 0; i < 35; i++) {
-                    const w_mid = 0.5 * (w_low + w_high);
-                    const de = 1.30 * Math.pow(w_mid * H_nom_mm, 0.625) / Math.pow(w_mid + H_nom_mm, 0.25);
-                    if (de < D_exact_mm) w_low = w_mid;
-                    else w_high = w_mid;
-                }
-                W_nom_mm = Math.round((0.5 * (w_low + w_high)) / 25.0) * 25.0;
-            } else if (fixedType === "W") {
-                W_nom_mm = Math.round(fixedDim);
-                let h_low = 50.0, h_high = 4000.0;
-                for (let i = 0; i < 35; i++) {
-                    const h_mid = 0.5 * (h_low + h_high);
-                    const de = 1.30 * Math.pow(W_nom_mm * h_mid, 0.625) / Math.pow(W_nom_mm + h_mid, 0.25);
-                    if (de < D_exact_mm) h_low = h_mid;
-                    else h_high = h_mid;
-                }
-                H_nom_mm = Math.round((0.5 * (h_low + h_high)) / 25.0) * 25.0;
-            } else {
-                H_nom_mm = Math.round((D_exact_mm * 0.85) / 25.0) * 25.0;
-                W_nom_mm = Math.round((D_exact_mm * 1.15) / 25.0) * 25.0;
-            }
-
-            const De_mm = 1.30 * Math.pow(W_nom_mm * H_nom_mm, 0.625) / Math.pow(W_nom_mm + H_nom_mm, 0.25);
-            const Dh_mm = 2.0 * W_nom_mm * H_nom_mm / (W_nom_mm + H_nom_mm);
-            const A_rect_m2 = (W_nom_mm * H_nom_mm) / 1e6;
-            const V_rect_ms = (Q_Lps / 1000.0) / Math.max(A_rect_m2, 1e-6);
-            const cb_rect = solveColebrook(Dh_mm, e_mm, V_rect_ms, rho_si);
-            const pv_rect_pa = 0.5 * rho_si * V_rect_ms * V_rect_ms;
-            const hf_rect_pam = cb_rect.f * (1000.0 / Dh_mm) * pv_rect_pa;
-            const total_dp_rect_pa = hf_rect_pam * L_m;
-
-            return {
-                shape: payload.shape || "rect",
-                rectangular: {
-                    H_nom_mm: H_nom_mm,
-                    W_nom_mm: W_nom_mm,
-                    H_nom_in: (H_nom_mm / 25.4).toFixed(0),
-                    W_nom_in: (W_nom_mm / 25.4).toFixed(0),
-                    De_mm: De_mm,
-                    Dh_mm: Dh_mm,
-                    aspect_ratio: Math.max(W_nom_mm, H_nom_mm) / Math.max(Math.min(W_nom_mm, H_nom_mm), 1),
-                    velocity_ms: V_rect_ms,
-                    velocity_fpm: V_rect_ms * 196.85,
-                    pv_pa: pv_rect_pa,
-                    pv_in_wg: pv_rect_pa / 249.0889,
-                    f: cb_rect.f,
-                    actual_head_loss_pa_m: hf_rect_pam,
-                    actual_head_loss_in_100ft: hf_rect_pam * 0.1224,
-                    pressure_loss_pa: total_dp_rect_pa,
-                    pressure_loss_in_wg: total_dp_rect_pa / 249.0889,
-                    has_user_dimension: (fixedType !== "NONE")
-                },
-                round: {
-                    D_exact_mm: D_exact_mm,
-                    D_nom_mm: D_nom_mm,
-                    D_nom_in: D_nom_in,
-                    calc: {
-                        velocity_ms: (Q_Lps / 1000.0) / Math.max(Math.PI * Math.pow(D_nom_mm/2000.0, 2), 1e-6),
-                        velocity_fpm: ((Q_Lps / 1000.0) / Math.max(Math.PI * Math.pow(D_nom_mm/2000.0, 2), 1e-6)) * 196.85
-                    }
-                },
-                steps: [
-                    {
-                        step_num: 1,
-                        name: "Colebrook Friction Factor (Equation 19)",
-                        latex: "\\frac{1}{\\sqrt{f}} = -2.0 \\log_{10} \\left( \\frac{\\epsilon}{3.7 D_h} + \\frac{2.51}{\\text{Re} \\sqrt{f}} \\right) \\implies f = " + cb_rect.f.toFixed(4)
-                    },
-                    {
-                        step_num: 2,
-                        name: "Darcy-Weisbach Actual Loss (Equation 18)",
-                        latex: "\\Delta P / L = f \\cdot \\frac{1}{D_h} \\cdot P_v = " + hf_rect_pam.toFixed(2) + "\\text{ Pa/m}"
-                    },
-                    {
-                        step_num: 3,
-                        name: "Huebscher Equivalent Diameter (Equation 25)",
-                        latex: "D_e = 1.30 \\frac{(W \\cdot H)^{0.625}}{(W + H)^{0.25}} = " + De_mm.toFixed(1) + "\\text{ mm}"
-                    }
-                ]
-            };
-        }
-
-        if (typeof window.AshraeOfficialEngineJS !== "undefined") {
-            try {
-                return window.AshraeOfficialEngineJS.calculate(payload);
-            } catch (err) {
-                console.error("AshraeOfficialEngineJS error for", code, err);
-            }
-        }
-
-        const H = parseFloat(inputs.H) || (isSI ? 225 : 9);
-        const W = parseFloat(inputs.W) || (isSI ? 225 : 9);
-        const D = parseFloat(inputs.D) || (isSI ? 250 : 10);
-        const Q = parseFloat(inputs.Q || inputs.Qc || inputs.Q1 || inputs.Qo) || (isSI ? 57 : 120);
-        const rho = isSI ? 1.204 : 0.075;
-
-        const Q_m3s = isSI ? (Q / 1000.0) : (Q * 0.000471947);
-        let A_m2 = 0;
-        if (code.includes("R") || code.includes("RECT") || (H > 0 && W > 0)) {
-            A_m2 = isSI ? (H * W / 1e6) : ((H * W) / 144.0 * 0.092903);
-        } else {
-            A_m2 = isSI ? (Math.PI * Math.pow(D / 2000.0, 2)) : (Math.PI * Math.pow(D / 24.0, 2) * 0.092903);
-        }
-        A_m2 = Math.max(A_m2, 1e-5);
-
-        const V_ms = Q_m3s / A_m2;
-        const V_fpm = V_ms * 196.85;
-        const pv_pa = 0.5 * rho * V_ms * V_ms;
-        const pv_in_wg = pv_pa / 249.0889;
-
-        let Co = 0.37;
-        if (code.startsWith("CR9") || code.startsWith("CD9")) Co = 0.37;
-        else if (code.startsWith("CR3") || code.startsWith("CD3")) Co = 0.24;
-        else if (code.startsWith("CR5") || code.startsWith("CD5")) Co = 0.35;
-        else if (code.startsWith("CR11") || code.startsWith("CD11")) {
-            const cb = solveColebrook(isSI ? (H > 0 ? (2*H*W/(H+W)) : D) : 300, 0.090, V_ms, rho);
-            const L = parseFloat(inputs.L) || (isSI ? 3 : 10);
-            const Dh_m = (isSI ? (H > 0 ? (2*H*W/(H+W)) : D) : 300) / 1000.0;
-            Co = cb.f * (L / Math.max(Dh_m, 1e-3));
-        }
-
-        const dp_pa = Co * pv_pa;
-        const dp_in_wg = dp_pa / 249.0889;
-
-        return {
-            code: code,
-            loss_coeff_Co: Co,
-            f: Co,
-            f_exact: Co,
-            velocity_ms: Math.round(V_ms * 10) / 10,
-            velocity_fpm: Math.round(V_fpm * 10) / 10,
-            pv_pa: Math.round(pv_pa * 10) / 10,
-            pv_in_wg: Math.round(pv_in_wg * 1000) / 1000,
-            pressure_loss_pa: Math.round(dp_pa * 10) / 10,
-            pressure_loss_in_wg: Math.round(dp_in_wg * 1000) / 1000,
-            raw_env: {
-                H: H, W: W, D: D, Q: Q,
-                A: A_m2, Vo: V_ms, V: V_ms,
-                Pv: pv_pa, Pvo: pv_pa,
-                Co: Co, Po: dp_pa,
-                rho: rho
-            },
-            steps: [
-                {
-                    step_num: 1,
-                    name: "Cross-Sectional Area (A)",
-                    latex: `A = \\frac{W \\cdot H}{10^6} = ${A_m2.toFixed(4)}\\text{ m}^2`
-                },
-                {
-                    step_num: 2,
-                    name: "Velocity (V)",
-                    latex: `V = \\frac{Q}{A} = \\frac{${Q_m3s.toFixed(3)}}{${A_m2.toFixed(4)}} = ${V_ms.toFixed(2)}\\text{ m/s}`
-                },
-                {
-                    step_num: 3,
-                    name: "Velocity Pressure (P_v)",
-                    latex: `P_v = 0.5 \\cdot \\rho \\cdot V^2 = 0.5 \\cdot 1.204 \\cdot (${V_ms.toFixed(2)})^2 = ${pv_pa.toFixed(2)}\\text{ Pa}`
-                },
-                {
-                    step_num: 4,
-                    name: "Fitting Pressure Loss (\\Delta P)",
-                    latex: `\\Delta P = C_o \\cdot P_v = ${Co.toFixed(2)} \\cdot ${pv_pa.toFixed(2)} = ${dp_pa.toFixed(2)}\\text{ Pa}`
-                }
-            ]
-        };
-    }
-
     async function initProjectManager() {
-        const localData = (typeof WebStorage !== "undefined") ? WebStorage.load() : { projects: [] };
-        let allProjects = Array.isArray(localData.projects) ? [...localData.projects] : [];
-        let activeId = localData.active_project_id || (allProjects[0] ? allProjects[0].id : null);
-
         try {
             const resp = await fetch("/api/projects");
-            if (resp.ok) {
-                const res = await resp.json();
-                if (res.status === "success" && res.data) {
-                    const apiProjects = res.data.projects || [];
-                    apiProjects.forEach(ap => {
-                        const existingIdx = allProjects.findIndex(p => p.id === ap.id || p.code === ap.code);
-                        if (existingIdx >= 0) {
-                            allProjects[existingIdx] = Object.assign({}, allProjects[existingIdx], ap);
-                        } else {
-                            allProjects.push(ap);
-                        }
-                    });
-                    if (res.data.active_project_id) {
-                        activeId = res.data.active_project_id;
-                    }
+            const res = await resp.json();
+            if (res.status === "success") {
+                state.projects = res.data.projects || [];
+                state.activeProjectId = res.data.active_project_id;
+                renderProjectDropdown();
+                if (state.activeProjectId) {
+                    await fetchActiveProjectDetails(state.activeProjectId);
                 }
             }
         } catch (err) {
-            console.warn("API /api/projects unreachable, using local storage:", err);
-        }
-
-        // Auto-sync any local projects to server in background
-        if (allProjects.length > 0) {
-            allProjects.forEach(p => {
-                fetch("/api/projects/sync", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ project: p })
-                }).catch(() => null);
-            });
-        }
-
-        state.projects = allProjects;
-        state.activeProjectId = activeId || (allProjects[0] ? allProjects[0].id : null);
-        if (typeof WebStorage !== "undefined") {
-            WebStorage.save({ active_project_id: state.activeProjectId, projects: allProjects });
-        }
-
-        renderProjectDropdown();
-        if (state.activeProjectId) {
-            await fetchActiveProjectDetails(state.activeProjectId);
-        } else {
-            state.activeProject = null;
-            updateProjectRibbonSnippet(null);
-            renderProjectScheduleTable(null);
-            renderSizerScheduleTable(null);
+            console.error("Failed to load projects:", err);
         }
     }
 
@@ -5241,7 +4831,7 @@ try {
             }
         });
 
-        const cur = state.projects.find(p => p.id === state.activeProjectId) || state.activeProject || state.projects[0];
+        const cur = state.projects.find(p => p.id === state.activeProjectId) || state.projects[0];
         if (cur && cur.id !== state.activeProjectId) {
             state.activeProjectId = cur.id;
         }
@@ -5333,46 +4923,16 @@ try {
 
     async function fetchActiveProjectDetails(projectId) {
         if (!projectId) return;
-        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
-        let fetched = false;
-        if (!isStaticWeb) {
-            try {
-                const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
-                if (resp.ok) {
-                    const res = await resp.json().catch(() => null);
-                    if (res && res.status === "success" && res.data) {
-                        state.activeProject = res.data;
-                        state.activeProjectId = res.data.id;
-                        updateProjectRibbonSnippet(res.data);
-                        fetched = true;
-                    }
-                }
-            } catch (err) {}
-        }
-
-        if (!fetched) {
-            const localData = (typeof WebStorage !== "undefined") ? WebStorage.load() : { projects: [] };
-            const proj = (localData.projects && localData.projects.find(p => p.id === projectId)) || 
-                         (state.projects && state.projects.find(p => p.id === projectId));
-            if (proj) {
-                state.activeProject = proj;
-                state.activeProjectId = proj.id;
-                if (!state.projects) state.projects = [];
-                if (!state.projects.some(p => p.id === proj.id || p.code === proj.code)) {
-                    state.projects.push(proj);
-                }
-                renderProjectDropdown();
-                updateProjectRibbonSnippet(proj);
-                if (elements.selectActiveProject) {
-                    elements.selectActiveProject.value = proj.id;
-                }
+        try {
+            const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+            const res = await resp.json();
+            if (res.status === "success") {
+                state.activeProject = res.data;
+                state.activeProjectId = res.data.id;
+                updateProjectRibbonSnippet(res.data);
             }
-        }
-
-        if (state.activeProject) {
-            renderProjectScheduleTable(state.activeProject);
-            renderSizerScheduleTable(state.activeProject);
-            updateProjectRibbonBadge();
+        } catch (err) {
+            console.error("Failed to fetch project details:", err);
         }
     }
 
@@ -5411,55 +4971,34 @@ try {
 
     async function switchActiveProject(projectId) {
         if (!projectId) return;
-        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
-        if (!isStaticWeb) {
-            try {
-                const resp = await fetch("/api/projects/select", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: projectId })
-                });
-                if (resp.ok) {
-                    await resp.json().catch(() => null);
+        try {
+            const resp = await fetch("/api/projects/select", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: projectId })
+            });
+            const res = await resp.json();
+            if (res.status === "success") {
+                state.activeProjectId = projectId;
+                await fetchActiveProjectDetails(projectId);
+                renderProjectDropdown();
+                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
                 }
-            } catch (err) {
-                console.warn("Server unavailable for select project, switching locally:", err);
+                showPrjToast(`📁 Active Project switched to: ${state.activeProject ? state.activeProject.name : projectId}`);
             }
+        } catch (err) {
+            console.error("Failed to select project:", err);
         }
-
-        state.activeProjectId = projectId;
-        if (typeof WebStorage !== "undefined") {
-            const store = WebStorage.load();
-            store.active_project_id = projectId;
-            WebStorage.save(store);
-        }
-        await fetchActiveProjectDetails(projectId);
-        renderProjectDropdown();
-        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
-        }
-        showPrjToast(`Active Project switched to: ${state.activeProject ? state.activeProject.name : projectId}`);
     }
 
     // --- All Projects Management (View, Search, Edit, Delete) ---
 
-    async function openAllProjectsModal() {
+    function openAllProjectsModal() {
         if (!elements.allProjectsModal) return;
         if (elements.inputFilterAllProjects) {
             elements.inputFilterAllProjects.value = "";
         }
-        try {
-            const resp = await fetch("/api/projects");
-            if (resp.ok) {
-                const res = await resp.json();
-                if (res.status === "success" && res.data && Array.isArray(res.data.projects)) {
-                    state.projects = res.data.projects;
-                    if (typeof WebStorage !== "undefined") {
-                        WebStorage.save({ active_project_id: state.activeProjectId, projects: res.data.projects });
-                    }
-                }
-            }
-        } catch (e) {}
         renderAllProjectsTable("");
         elements.allProjectsModal.classList.remove("hidden");
         if (elements.inputFilterAllProjects) {
@@ -5581,7 +5120,7 @@ try {
     async function downloadProjectArchive(projectId) {
         const pid = projectId || state.activeProjectId;
         if (!pid) {
-            showPrjToast("Please select an active project first.");
+            showPrjToast("⚠️ Please select an active project first.");
             return;
         }
         const prj = (state.projects && state.projects.find(p => p.id === pid)) || state.activeProject;
@@ -5591,30 +5130,16 @@ try {
         const cleanName = String(prjName).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
         const defaultFilename = `${cleanCode}_${cleanName}.dfp`;
 
-        const p = prj || (state.projects && state.projects.find(x => x.id === pid)) || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
-        const clientArchiveJson = JSON.stringify({
-            archive_version: "1.0",
-            exported_at: new Date().toISOString(),
-            application: "DuctFit Pro",
-            project: p
-        }, null, 2);
-
-        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
-
         // Priority 1: Native Electron Desktop Save Dialog
         if (window.electronAPI && typeof window.electronAPI.saveProjectFile === "function") {
             try {
-                showPrjToast(`Generating project archive for "${cleanCode}"...`);
-                let archiveJson = clientArchiveJson;
-                if (!isStaticWeb) {
-                    try {
-                        const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                        if (resp.ok) {
-                            const txt = await resp.text();
-                            if (txt && txt.trim().startsWith("{")) archiveJson = txt;
-                        }
-                    } catch (e) {}
+                showPrjToast(`📦 Generating project archive for "${cleanCode}"...`);
+                const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
+                if (!resp.ok) {
+                    showPrjToast("❌ Failed to fetch project archive from server.");
+                    return;
                 }
+                const archiveJson = await resp.text();
                 const result = await window.electronAPI.saveProjectFile({
                     defaultPath: defaultFilename,
                     filters: [
@@ -5626,20 +5151,19 @@ try {
                 });
 
                 if (result && result.success) {
-                    showPrjToast(`Archive saved successfully to:
-${result.filePath}`);
+                    showPrjToast(`✅ Archive saved successfully to:\n${result.filePath}`);
                 } else if (result && result.error) {
-                    showPrjToast(`Failed to save file: ${result.error}`);
+                    showPrjToast(`❌ Failed to save file: ${result.error}`);
                 }
                 return;
             } catch (err) {
                 console.error("Electron archive save error:", err);
-                showPrjToast(`Error saving archive: ${err.message}`);
+                showPrjToast(`❌ Error saving archive: ${err.message}`);
                 return;
             }
         }
 
-        // Priority 2: Modern Browser File System Access API
+        // Priority 2: Modern Browser File System Access API (Prompts native Save As dialog directly)
         if (typeof window.showSaveFilePicker === "function") {
             try {
                 const fileHandle = await window.showSaveFilePicker({
@@ -5650,54 +5174,41 @@ ${result.filePath}`);
                     }]
                 });
 
-                showPrjToast(`Generating archive "${defaultFilename}"...`);
-                let archiveJson = clientArchiveJson;
-                if (!isStaticWeb) {
-                    try {
-                        const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                        if (resp.ok) {
-                            const txt = await resp.text();
-                            if (txt && txt.trim().startsWith("{")) archiveJson = txt;
-                        }
-                    } catch (e) {}
+                showPrjToast(`💾 Generating archive "${defaultFilename}"...`);
+                const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
+                if (!resp.ok) {
+                    showPrjToast("❌ Failed to fetch project archive from server.");
+                    return;
                 }
+                const archiveJson = await resp.text();
                 const writable = await fileHandle.createWritable();
                 await writable.write(archiveJson);
                 await writable.close();
-                showPrjToast(`Project archive saved: ${defaultFilename}`);
+                showPrjToast(`✅ Project archive saved: ${defaultFilename}`);
                 return;
             } catch (pickerErr) {
-                if (pickerErr && pickerErr.name === "AbortError") return;
-                console.warn("showSaveFilePicker error, falling back to direct download:", pickerErr);
+                if (pickerErr && pickerErr.name === "AbortError") {
+                    // User canceled the Save dialog
+                    return;
+                }
+                console.warn("showSaveFilePicker not permitted or failed, falling back to direct download:", pickerErr);
+                // Fall through to standard download fallback
             }
         }
 
-        // Priority 3: Fallback Standard Browser Download
+        // Priority 3: Fallback Standard Browser Download (Triggers browser download manager / Save As)
         try {
-            showPrjToast(`Downloading archive "${defaultFilename}"...`);
-            let archiveJson = clientArchiveJson;
-            if (!isStaticWeb) {
-                try {
-                    const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}/archive`);
-                    if (resp.ok) {
-                        const txt = await resp.text();
-                        if (txt && txt.trim().startsWith("{")) archiveJson = txt;
-                    }
-                } catch (e) {}
-            }
-
-            const blob = new Blob([archiveJson], { type: "application/json" });
-            const blobUrl = URL.createObjectURL(blob);
+            showPrjToast(`📦 Downloading archive "${defaultFilename}"...`);
             const a = document.createElement("a");
-            a.href = blobUrl;
+            a.href = `/api/projects/${encodeURIComponent(pid)}/archive`;
             a.download = defaultFilename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-            showPrjToast(`Project archive downloaded: ${defaultFilename}`);
+            showPrjToast(`✅ Project archive downloaded: ${defaultFilename}`);
         } catch (downloadErr) {
             console.error("Standard download error:", downloadErr);
+            window.location.href = `/api/projects/${encodeURIComponent(pid)}/archive`;
         }
     }
 
@@ -5722,59 +5233,29 @@ ${result.filePath}`);
 
     async function processArchiveText(text) {
         try {
-            showToastNotification("Inspecting project archive...", 2000);
+            showToastNotification("📥 Inspecting project archive...", 2000);
             let archiveData;
             try {
-                if (!text || typeof text !== "string" || !text.trim().startsWith("{")) {
-                    throw new Error("Invalid archive file format (not JSON).");
-                }
                 archiveData = JSON.parse(text);
             } catch (err) {
                 showToastNotification("❌ Invalid archive file. Content must be valid JSON.", 4000);
                 return;
             }
 
-            const p = archiveData.project || archiveData;
-            if (!p || (!p.code && !p.id) || !p.name) {
-                showToastNotification("❌ Invalid archive: missing Project Code or Name.", 4000);
+            const resp = await fetch("/api/projects/validate-archive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ archive: archiveData })
+            });
+            const res = await resp.json();
+            if (res.status !== "success" || !res.data || !res.data.valid) {
+                showToastNotification("❌ " + (res.data && res.data.error ? res.data.error : (res.message || "Invalid archive format")), 4000);
                 return;
             }
 
-            const existingProjects = (state.projects && state.projects.length > 0) ? state.projects : WebStorage.load().projects;
-            const conflictPrj = existingProjects.find(ep => ep.code === p.code || ep.id === p.id);
-            const hasConflict = Boolean(conflictPrj);
-
-            const fits = p.fittings || [];
-            const segs = p.duct_segments || [];
-            let totalDp = 0;
-            fits.forEach(f => {
-                totalDp += Number(f.total_dp || ((Number(f.dp) || 0) * (Number(f.qty) || 1)));
-            });
-
-            const summary = {
-                project_id: p.id || ("PRJ-" + Date.now().toString(36).toUpperCase()),
-                code: p.code || p.id,
-                name: p.name,
-                client: p.client || "-",
-                contractor: p.contractor || "-",
-                subcontractor: p.subcontractor || "-",
-                fittings_count: fits.length,
-                duct_segments_count: segs.length,
-                total_dp: Math.round(totalDp * 10) / 10,
-                unit_system: p.unit_system || state.unit || "SI",
-                design_margin: p.margin_pct || 15
-            };
-
-            const valData = {
-                valid: true,
-                has_conflict: hasConflict,
-                conflict_info: hasConflict ? { existing_code: conflictPrj.code } : {},
-                summary: summary
-            };
-
             state.pendingArchiveData = archiveData;
-            state.pendingArchiveSummary = summary;
-            openImportArchiveModal(valData);
+            state.pendingArchiveSummary = res.data.summary;
+            openImportArchiveModal(res.data);
         } catch (err) {
             console.error("Archive import error:", err);
             showToastNotification("❌ Failed to process archive: " + err.message, 4000);
@@ -5868,38 +5349,30 @@ ${result.filePath}`);
         }
 
         try {
-            const rawProj = archiveData.project || archiveData;
-            const newProj = JSON.parse(JSON.stringify(rawProj));
-
-            if (mode === "copy" || !newProj.id) {
-                newProj.id = "PRJ-" + Date.now().toString(36).toUpperCase();
-                newProj.code = newProj.code + "-COPY";
-                newProj.name = newProj.name + " (Copy)";
-            }
-
-            WebStorage.updateProject(newProj);
-            state.projects = WebStorage.load().projects;
-            state.activeProjectId = newProj.id;
-            state.activeProject = newProj;
-
-            closeImportArchiveModal();
-            renderProjectDropdown();
-            updateProjectRibbonSnippet(newProj);
-            if (elements.selectActiveProject) {
-                elements.selectActiveProject.value = newProj.id;
-            }
-            renderProjectScheduleTable(newProj);
-            renderSizerScheduleTable(newProj);
-            updateProjectRibbonBadge();
-
-            const actionTxt = mode === "overwrite" ? "updated & replaced" : "retrieved as new project";
-            showToastNotification(`✅ Project "${newProj.code}" ${actionTxt} successfully!`, 4000);
-            if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-                renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+            const resp = await fetch("/api/projects/import-archive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    archive: archiveData,
+                    conflict_resolution: mode
+                })
+            });
+            const res = await resp.json();
+            if (res.status === "success" && res.data) {
+                closeImportArchiveModal();
+                await initProjectManager();
+                await switchActiveProject(res.data.id);
+                const actionTxt = mode === "overwrite" ? "updated & replaced" : "retrieved as new project";
+                showToastNotification(`✅ Project "${res.data.code}" ${actionTxt} successfully!`, 4000);
+                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+                }
+            } else {
+                showToastNotification("❌ " + (res.message || "Failed to import project"), 4000);
             }
         } catch (err) {
-            console.error("Archive import error:", err);
-            showToastNotification("❌ Import failed: " + err.message, 4000);
+            console.error("Confirm import error:", err);
+            showToastNotification("❌ Error importing project: " + err.message, 4000);
         } finally {
             if (elements.btnConfirmImportArchive) {
                 elements.btnConfirmImportArchive.disabled = false;
@@ -5952,7 +5425,7 @@ ${result.filePath}`);
         }
 
         try {
-            await fetch(`/api/projects/${encodeURIComponent(pid)}`, {
+            const resp = await fetch(`/api/projects/${encodeURIComponent(pid)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -5964,30 +5437,20 @@ ${result.filePath}`);
                     notes: notes
                 })
             });
-        } catch (e) {}
-
-        const store = WebStorage.load();
-        const p = store.projects.find(x => x.id === pid);
-        if (p) {
-            p.code = code;
-            p.name = name;
-            p.client = client;
-            p.contractor = contractor;
-            p.subcontractor = subcontractor;
-            p.notes = notes;
-            WebStorage.save(store);
-            state.projects = store.projects;
-            if (state.activeProjectId === pid) {
-                state.activeProject = p;
-                updateProjectRibbonSnippet(p);
+            const res = await resp.json();
+            if (res.status === "success") {
+                closeEditProjectModal();
+                showPrjToast(`✓ Project "${code} - ${name}" updated successfully!`);
+                await initProjectManager();
+                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+                }
+            } else {
+                alert(`Error: ${res.message || "Failed to update project"}`);
             }
-        }
-
-        closeEditProjectModal();
-        renderProjectDropdown();
-        showPrjToast(`✓ Project "${code} - ${name}" updated successfully!`);
-        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+        } catch (err) {
+            console.error("Failed to update project:", err);
+            alert("Network error updating project.");
         }
     }
 
@@ -6005,25 +5468,22 @@ ${result.filePath}`);
         }
 
         try {
-            await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+            const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
                 method: "DELETE"
             });
-        } catch (e) {}
-
-        WebStorage.deleteProject(projectId);
-        state.projects = WebStorage.load().projects;
-        state.activeProjectId = WebStorage.load().active_project_id;
-        state.activeProject = WebStorage.getActiveProject();
-
-        renderProjectDropdown();
-        updateProjectRibbonSnippet(state.activeProject);
-        if (state.activeProject) {
-            renderProjectScheduleTable(state.activeProject);
-            renderSizerScheduleTable(state.activeProject);
-        }
-        showPrjToast(`🗑️ Project ${nameStr} was deleted.`);
-        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+            const res = await resp.json();
+            if (res.status === "success") {
+                showPrjToast(`🗑️ Project ${nameStr} was deleted.`);
+                await initProjectManager();
+                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+                }
+            } else {
+                alert(`Error: ${res.message || "Failed to delete project"}`);
+            }
+        } catch (err) {
+            console.error("Failed to delete project:", err);
+            alert("Network error deleting project.");
         }
     }
 
@@ -6063,80 +5523,35 @@ ${result.filePath}`);
             return;
         }
 
-        const cleanId = code.replace(/\s+/g, '-').toUpperCase();
-        const newPrj = {
-            id: cleanId || ("PRJ-" + Date.now().toString(36).toUpperCase()),
-            code: code,
-            name: name,
-            client: client,
-            contractor: contractor,
-            subcontractor: subcontractor,
-            notes: notes,
-            unit_system: state.unit || "SI",
-            margin_pct: 15,
-            fittings: [],
-            duct_segments: [],
-            created_at: new Date().toISOString()
-        };
-
-        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
-        if (!isStaticWeb) {
-            try {
-                const resp = await fetch("/api/projects", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        code: code,
-                        name: name,
-                        client: client,
-                        contractor: contractor,
-                        subcontractor: subcontractor,
-                        notes: notes,
-                        unit_system: state.unit || "SI"
-                    })
-                });
-                if (resp.ok) {
-                    const res = await resp.json().catch(() => null);
-                    if (res && res.status === "success" && res.data) {
-                        if (res.data.id) newPrj.id = res.data.id;
-                        Object.assign(newPrj, res.data);
-                    }
+        try {
+            const resp = await fetch("/api/projects", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: code,
+                    name: name,
+                    client: client,
+                    contractor: contractor,
+                    subcontractor: subcontractor,
+                    notes: notes,
+                    unit_system: state.unit
+                })
+            });
+            const res = await resp.json();
+            if (res.status === "success") {
+                closeNewProjectModal();
+                showPrjToast(`✓ Created Project: ${res.data.code} - ${res.data.name}`);
+                await initProjectManager();
+                if (elements.selectActiveProject) {
+                    elements.selectActiveProject.value = res.data.id;
                 }
-            } catch (err) {
-                console.warn("Server unavailable for new project, storing in browser local storage:", err);
+            } else {
+                alert(`Error: ${res.message || "Failed to create project"}`);
             }
+        } catch (err) {
+            console.error("Failed to save project:", err);
+            alert("Network error creating project.");
         }
-
-        if (typeof WebStorage !== "undefined") {
-            WebStorage.createProject(newPrj);
-        }
-
-        if (!state.projects) state.projects = [];
-        const existingIdx = state.projects.findIndex(p => p.id === newPrj.id || p.code === newPrj.code);
-        if (existingIdx >= 0) {
-            state.projects[existingIdx] = newPrj;
-        } else {
-            state.projects.unshift(newPrj);
-        }
-
-        state.activeProjectId = newPrj.id;
-        state.activeProject = newPrj;
-
-        closeNewProjectModal();
-        renderProjectDropdown();
-        updateProjectRibbonSnippet(newPrj);
-        if (elements.selectActiveProject) {
-            elements.selectActiveProject.value = newPrj.id;
-        }
-        renderProjectScheduleTable(newPrj);
-        renderSizerScheduleTable(newPrj);
-        updateProjectRibbonBadge();
-
-        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
-        }
-
-        showPrjToast(`✨ Project "${code} - ${name}" created & selected!`);
     }
 
     // --- Helper Functions to extract accurate Flow Rate and Dimensions ---
@@ -6527,19 +5942,8 @@ ${result.filePath}`);
                     alert(`Error: ${res.message || "Failed to add sized duct section"}`);
                 }
             } catch (err) {
-                console.warn("Server unavailable, adding sizer segment to local storage:", err);
-                const prj = state.activeProject || WebStorage.getActiveProject();
-                if (prj) {
-                    if (!prj.duct_segments) prj.duct_segments = [];
-                    const segItem = { id: "seg_" + Date.now().toString(36), ...payload };
-                    prj.duct_segments.push(segItem);
-                    WebStorage.updateProject(prj);
-                    state.activeProject = prj;
-                    closeAddFittingDialog();
-                    renderSizerScheduleTable(prj);
-                    updateProjectRibbonBadge();
-                    showPrjToast(`✓ Added Sized Duct Section [${tag}] to ${prj.code}!`);
-                }
+                console.error("Failed to add sizer segment to project:", err);
+                alert("Network error adding duct segment.");
             }
 
         } else {
@@ -6655,35 +6059,8 @@ ${result.filePath}`);
                     alert(`Error: ${res.message || "Failed to save fitting"}`);
                 }
             } catch (err) {
-                console.warn("Server unavailable, saving fitting to local storage:", err);
-                const prj = state.activeProject || WebStorage.getActiveProject();
-                if (prj) {
-                    if (!prj.fittings) prj.fittings = [];
-                    const isUpdating = state.editingFitting && state.editingFitting.id;
-                    if (isUpdating) {
-                        const idx = prj.fittings.findIndex(f => f.id === state.editingFitting.id);
-                        if (idx >= 0) {
-                            prj.fittings[idx] = { ...prj.fittings[idx], ...payload, id: state.editingFitting.id };
-                        }
-                    } else {
-                        const fittingItem = {
-                            id: "fit_" + Date.now().toString(36),
-                            ...payload,
-                            date_added: new Date().toISOString()
-                        };
-                        prj.fittings.push(fittingItem);
-                    }
-                    WebStorage.updateProject(prj);
-                    state.activeProject = prj;
-                    state.editingFitting = null;
-                    closeAddFittingDialog();
-                    renderProjectScheduleTable(prj);
-                    updateProjectRibbonBadge();
-                    showPrjToast(isUpdating
-                        ? `✓ Updated ${code} [${tag}] in schedule!`
-                        : `✓ Added ${code} [${tag}] to ${prj.code}!`
-                    );
-                }
+                console.error("Failed to save fitting to project:", err);
+                alert("Network error saving fitting.");
             }
         }
     }
@@ -7412,23 +6789,6 @@ ${result.filePath}`);
         if (!elements.tbodyProjectSchedule) return;
         elements.tbodyProjectSchedule.innerHTML = "";
 
-        if (!p) {
-            if (elements.scheduleBarCount) elements.scheduleBarCount.textContent = "0 items";
-            elements.tbodyProjectSchedule.innerHTML = `
-                <tr>
-                    <td colspan="15" style="text-align: center; padding: 36px 16px; color: #64748b; font-style: italic;">
-                        No active project selected. Select or create a project to view fittings schedule.
-                    </td>
-                </tr>
-            `;
-            if (elements.kpiTotalFittings) elements.kpiTotalFittings.textContent = "0";
-            if (elements.kpiSubtotalDp) elements.kpiSubtotalDp.textContent = "0.0 Pa";
-            if (elements.kpiTotalDp) elements.kpiTotalDp.textContent = "0.0 Pa";
-            if (elements.kpiMaxLoss) elements.kpiMaxLoss.textContent = "0.0 Pa";
-            if (elements.kpiTotalAirflow) elements.kpiTotalAirflow.textContent = "-";
-            return;
-        }
-
         const fittings = p.fittings || [];
         const isSI = (p.unit_system || state.unit) === "SI";
         const dpUnit = isSI ? "Pa" : "in. wg";
@@ -7797,21 +7157,6 @@ ${result.filePath}`);
         if (!elements.tbodySizerSchedule) return;
         elements.tbodySizerSchedule.innerHTML = "";
 
-        if (!p) {
-            if (elements.sizerBarCount) elements.sizerBarCount.textContent = "0 runs";
-            elements.tbodySizerSchedule.innerHTML = `
-                <tr>
-                    <td colspan="15" style="text-align: center; padding: 36px 16px; color: #64748b; font-style: italic;">
-                        No active project selected. Select or create a project to view duct sizing schedule.
-                    </td>
-                </tr>
-            `;
-            if (elements.kpiSizerTotalRuns) elements.kpiSizerTotalRuns.textContent = "0";
-            if (elements.kpiSizerSubtotalDp) elements.kpiSizerSubtotalDp.textContent = "0.0 Pa";
-            if (elements.kpiSizerTotalDp) elements.kpiSizerTotalDp.textContent = "0.0 Pa";
-            return;
-        }
-
         const segments = p.duct_segments || [];
         const isSI = (p.unit_system || state.unit) === "SI";
         const dpUnit = isSI ? "Pa" : "in. wg";
@@ -7951,16 +7296,7 @@ ${result.filePath}`);
                 showPrjToast("🗑️ Sized duct section removed from schedule");
             }
         } catch (err) {
-            console.warn("Server unavailable, removing sizer segment from local storage:", err);
-            const prj = state.activeProject || WebStorage.getActiveProject();
-            if (prj && prj.duct_segments) {
-                prj.duct_segments = prj.duct_segments.filter(s => s.id !== segId);
-                WebStorage.updateProject(prj);
-                state.activeProject = prj;
-                renderSizerScheduleTable(prj);
-                updateProjectRibbonBadge();
-                showPrjToast("🗑️ Sized duct section removed from schedule");
-            }
+            console.error("Failed to delete sizer segment:", err);
         }
     }
 
@@ -8041,50 +7377,27 @@ ${result.filePath}`);
         if (!state.activeProjectId || !fittingId) return;
         const q = Math.max(1, parseInt(newQty, 10) || 1);
 
-        // 1. Immediately update in-memory and WebStorage for instant UI feedback
-        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
-        let foundFitting = null;
-        if (prj && prj.fittings) {
-            foundFitting = prj.fittings.find(f => f.id === fittingId || f.tag === fittingId);
-            if (foundFitting) {
-                foundFitting.qty = q;
-                foundFitting.total_dp = Number(((Number(foundFitting.dp) || 0) * q).toFixed(2));
-                if (typeof WebStorage !== "undefined") {
-                    WebStorage.updateProject(prj);
-                }
-                state.activeProject = prj;
-                renderProjectScheduleTable(prj);
-                updateProjectRibbonBadge();
-            }
-        }
-
-        // 2. Sync to server seamlessly without blocking alerts
         try {
             const resp = await fetch(`/api/projects/${encodeURIComponent(state.activeProjectId)}/fittings/${encodeURIComponent(fittingId)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ qty: q, project_data: prj })
+                body: JSON.stringify({ qty: q })
             });
-            const res = await resp.json().catch(() => null);
-            if (res && res.status === "success") {
-                const tagStr = (res.data && res.data.tag) ? res.data.tag : (foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting");
+            const res = await resp.json();
+            if (res.status === "success") {
+                await fetchActiveProjectDetails(state.activeProjectId);
+                renderProjectScheduleTable(state.activeProject);
+                updateProjectRibbonBadge();
+                const tagStr = (res.data && res.data.tag) ? res.data.tag : "Fitting";
                 showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
-            } else if (prj) {
-                // If fitting was not found on server, auto-sync full project to server
-                try {
-                    await fetch("/api/projects/sync", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ project: prj })
-                    });
-                } catch (e) {}
-                const tagStr = foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting";
-                showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
+            } else {
+                alert(`Error updating quantity: ${res.message || "Failed to update"}`);
+                if (state.activeProject) renderProjectScheduleTable(state.activeProject);
             }
         } catch (err) {
-            console.warn("Server unavailable, updated quantity in local state:", err);
-            const tagStr = foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting";
-            showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
+            console.error("Failed to update fitting quantity inline:", err);
+            alert("Network error updating quantity.");
+            if (state.activeProject) renderProjectScheduleTable(state.activeProject);
         }
     }
 
@@ -8115,52 +7428,11 @@ ${result.filePath}`);
                     }
                 }, 60);
             } else {
-                // Fallback local duplicate
-                const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
-                if (prj && prj.fittings) {
-                    const item = prj.fittings.find(f => f.id === fittingId || f.tag === fittingId);
-                    if (item) {
-                        const clone = JSON.parse(JSON.stringify(item));
-                        clone.id = "fit_" + Date.now().toString(36);
-                        clone.tag = (clone.tag || item.code) + "-COPY";
-                        prj.fittings.push(clone);
-                        if (typeof WebStorage !== "undefined") WebStorage.updateProject(prj);
-                        state.activeProject = prj;
-                        try {
-                            fetch("/api/projects/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: prj }) });
-                        } catch (e) {}
-                        renderProjectScheduleTable(prj);
-                        updateProjectRibbonBadge();
-                        showPrjToast(`📋 Duplicated ${clone.tag} to end of schedule`);
-                    }
-                }
+                alert(res.message || "Failed to duplicate fitting.");
             }
         } catch (err) {
-            console.warn("Server unavailable, duplicating fitting in local storage:", err);
-            const prj = state.activeProject || WebStorage.getActiveProject();
-            if (prj && prj.fittings) {
-                const item = prj.fittings.find(f => f.id === fittingId);
-                if (item) {
-                    const clone = JSON.parse(JSON.stringify(item));
-                    clone.id = "fit_" + Date.now().toString(36);
-                    clone.tag = (clone.tag || item.code) + "-COPY";
-                    prj.fittings.push(clone);
-                    WebStorage.updateProject(prj);
-                    state.activeProject = prj;
-                    renderProjectScheduleTable(prj);
-                    updateProjectRibbonBadge();
-                    showPrjToast(`📋 Duplicated ${clone.tag} to end of schedule`);
-                    setTimeout(() => {
-                        const rows = elements.tbodyProjectSchedule?.querySelectorAll("tr");
-                        if (rows && rows.length > 0) {
-                            const lastRow = rows[rows.length - 1];
-                            lastRow.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                            lastRow.classList.add("row-highlight-pulse");
-                            setTimeout(() => lastRow.classList.remove("row-highlight-pulse"), 1600);
-                        }
-                    }, 60);
-                }
-            }
+            console.error("Failed to duplicate fitting:", err);
+            alert("Failed to duplicate fitting.");
         }
     }
 
@@ -8180,16 +7452,7 @@ ${result.filePath}`);
                 showPrjToast("🗑️ Fitting removed from schedule");
             }
         } catch (err) {
-            console.warn("Server unavailable, removing fitting from local storage:", err);
-            const prj = state.activeProject || WebStorage.getActiveProject();
-            if (prj && prj.fittings) {
-                prj.fittings = prj.fittings.filter(f => f.id !== fittingId);
-                WebStorage.updateProject(prj);
-                state.activeProject = prj;
-                renderProjectScheduleTable(prj);
-                updateProjectRibbonBadge();
-                showPrjToast("🗑️ Fitting removed from schedule");
-            }
+            console.error("Failed to delete fitting:", err);
         }
     }
 
@@ -8220,24 +7483,7 @@ ${result.filePath}`);
                 showPrjToast(isSizerTab ? "🗑️ All sized duct sections cleared" : "🗑️ All fittings cleared");
             }
         } catch (err) {
-            console.warn("Server unavailable, clearing schedule items in local storage:", err);
-            const prj = state.activeProject || WebStorage.getActiveProject();
-            if (prj) {
-                if (isSizerTab) {
-                    prj.duct_segments = [];
-                } else {
-                    prj.fittings = [];
-                }
-                WebStorage.updateProject(prj);
-                state.activeProject = prj;
-                if (isSizerTab) {
-                    renderSizerScheduleTable(prj);
-                } else {
-                    renderProjectScheduleTable(prj);
-                }
-                updateProjectRibbonBadge();
-                showPrjToast(isSizerTab ? "🗑️ All sized duct sections cleared" : "🗑️ All fittings cleared");
-            }
+            console.error("Failed to clear schedule items:", err);
         }
     }
 
@@ -8402,103 +7648,30 @@ ${result.filePath}`);
         return `"${str}"`;
     }
 
-    async function downloadFitductPdf() {
-        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
-        const prjId = state.activeProjectId || (prj ? prj.id : null);
-        if (!prj || !prjId) {
+    function downloadFitductPdf() {
+        const prjId = state.activeProjectId;
+        if (!prjId) {
             showPrjToast("Please select or create an active project first.");
             return;
         }
 
         const includeCalcs = elements.chkIncludeCalculations ? (elements.chkIncludeCalculations.checked ? "1" : "0") : "1";
-        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (prj.design_margin ?? prj.margin_pct ?? 10);
-        const isSizer = (state.summaryTab === "sizer");
-        const reportLabel = isSizer ? "Duct Sizing Report" : "Duct Fitting Report";
-        const isStaticNetlify = (window.location.hostname === "ductfit-pro.netlify.app");
+        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (state.activeProject?.design_margin ?? 10);
 
-        // Priority 1: When running on a server (Render or localhost), download the official ReportLab vector PDF!
-        if (!isStaticNetlify) {
-            showPrjToast(`Generating official ReportLab vector ${reportLabel} (PDF)...`);
-            const endpoint = isSizer
-                ? `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`
-                : `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
-            
-            try {
-                const resp = await fetch(endpoint);
-                if (resp.ok) {
-                    const blob = await resp.blob();
-                    if (blob && blob.size > 2000) {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = blobUrl;
-                        const safeCode = (prj.code || prjId).replace(/[^a-zA-Z0-9_-]/g, "_");
-                        a.download = isSizer ? `${safeCode}_Duct_Sizing_Report.pdf` : `${safeCode}_DuctFit_Pro_Report.pdf`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(blobUrl);
-                        showPrjToast(`Official ${reportLabel} downloaded successfully!`);
-                        return;
-                    }
-                }
-            } catch (err) {
-                console.warn("Server PDF export failed, falling back to client PDF:", err);
-            }
-        }
-
-        // Priority 2: Client-side PDF export (for Netlify static web)
-        if (typeof window.DuctFitPdfReport !== "undefined") {
-            showPrjToast(`Generating official DuctFit Pro ${reportLabel} (PDF)...`);
-            try {
-                if (isSizer) {
-                    await window.DuctFitPdfReport.exportProjectSizerPdf(prj, {
-                        includeCalcs: includeCalcs === "1",
-                        margin: marginVal
-                    });
-                } else {
-                    await window.DuctFitPdfReport.exportProjectFittingPdf(prj, {
-                        includeCalcs: includeCalcs === "1",
-                        margin: marginVal
-                    });
-                }
-                showPrjToast(`Official ${reportLabel} downloaded successfully!`);
-                return;
-            } catch (err) {
-                console.error("Client PDF generation error:", err);
-                showPrjToast("Client PDF error, opening print preview...");
-                if (isSizer) {
-                    window.DuctFitPdfReport.printSizerReport(prj, { includeCalcs: includeCalcs === "1", margin: marginVal });
-                } else {
-                    window.DuctFitPdfReport.printFittingReport(prj, { includeCalcs: includeCalcs === "1", margin: marginVal });
-                }
-            }
+        if (state.summaryTab === "sizer") {
+            showPrjToast(includeCalcs === "1"
+                ? "Generating official DuctFit Pro Duct Sizing Report with calculations (PDF)..."
+                : "Generating official DuctFit Pro Duct Sizing Report without calculations (PDF)...");
+            window.location.href = `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+        } else {
+            showPrjToast(includeCalcs === "1"
+                ? "Generating official DuctFit Pro Duct Fitting Report with calculations (PDF)..."
+                : "Generating official DuctFit Pro Duct Fitting Report without calculations (PDF)...");
+            window.location.href = `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
         }
     }
 
     function printProjectReport() {
-        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
-        if (!prj) {
-            showPrjToast("Please select or create an active project first.");
-            return;
-        }
-        const includeCalcs = elements.chkIncludeCalculations ? (elements.chkIncludeCalculations.checked ? "1" : "0") : "1";
-        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (prj.design_margin ?? prj.margin_pct ?? 10);
-        const isSizer = (state.summaryTab === "sizer");
-
-        if (typeof window.DuctFitPdfReport !== "undefined") {
-            if (isSizer) {
-                window.DuctFitPdfReport.printSizerReport(prj, {
-                    includeCalcs: includeCalcs === "1",
-                    margin: marginVal
-                });
-            } else {
-                window.DuctFitPdfReport.printFittingReport(prj, {
-                    includeCalcs: includeCalcs === "1",
-                    margin: marginVal
-                });
-            }
-            return;
-        }
         window.print();
     }
 

@@ -105,10 +105,24 @@ def save_projects_data(data):
         temp_file = projects_file + ".tmp"
         with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        if os.path.exists(projects_file):
-            os.replace(temp_file, projects_file)
-        else:
-            os.rename(temp_file, projects_file)
+        for attempt in range(5):
+            try:
+                if os.path.exists(projects_file):
+                    os.replace(temp_file, projects_file)
+                else:
+                    os.rename(temp_file, projects_file)
+                return True
+            except OSError:
+                if attempt == 4:
+                    with open(projects_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+                    if os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                        except OSError:
+                            pass
+                    return True
+                time.sleep(0.05)
         return True
     except Exception as e:
         print(f"Error saving {projects_file}: {e}")

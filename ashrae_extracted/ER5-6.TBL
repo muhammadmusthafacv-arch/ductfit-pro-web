@@ -1,0 +1,10 @@
+                 #        #        #        #        #        #        #        #        #        #        #
+   ER5-6  Symmetrical Wye of the Type Ab1 + Ab2 = Ac, Ab1 = Ab2, 30 Degree, Converging
+          (Idelchik 1986, Diagram 7-30)
+ Qb1/Qc       0.01      0.1      0.2      0.3      0.4      0.5      0.6      0.7      0.8      0.9      1.0
+
+    Cb1     -6223.   -47.25    -8.13    -2.14    -0.47     0.10     0.28     0.34     0.33     0.30     0.26
+============================================================================================================
+'Rev.  1,2                       For the other branch, subscripts 1 and 2 change places.
+'Date  01/02,02/06
+'By:   HFB,PJB
