@@ -22,55 +22,29 @@ def _get_timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_default_project_data():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    seed_file = os.path.join(base_dir, "projects.json")
-    if os.path.exists(seed_file):
-        try:
-            with open(seed_file, "r", encoding="utf-8") as f:
-                d = json.load(f)
-                if isinstance(d, dict) and d.get("projects"):
-                    return d
-        except Exception:
-            pass
-    seed_api = os.path.join(base_dir, "api_projects.json")
-    if os.path.exists(seed_api):
-        try:
-            with open(seed_api, "r", encoding="utf-8") as f:
-                d = json.load(f)
-                if isinstance(d, dict) and d.get("data") and d["data"].get("projects"):
-                    return d["data"]
-        except Exception:
-            pass
     return {
-        "active_project_id": "PE-109",
-        "projects": [
-            {
-                "id": "PE-109",
-                "code": "PE-109",
-                "name": "Habshan 5 CO2 Recovery and Injection",
-                "client": "ADNOC Gas Processing",
-                "contractor": "Petrofac Emirates LLC",
-                "subcontractor": "Tebodin Bilfinger LLC",
-                "notes": "CO2 Recovery and Gas Injection System - High Pressure & Standard Ductwork",
-                "unit_system": "SI",
-                "margin_pct": 15,
-                "fittings": [],
-                "duct_segments": []
-            }
-        ]
+        "active_project_id": None,
+        "projects": []
     }
 
 def cleanup_sample_projects(data):
     if not isinstance(data, dict) or "projects" not in data:
         return False
-    sample_ids = {"PRFC-1021", "SDF"}
-    sample_names = {"EPSILON", "ddd"}
+    sample_ids = {"PE-109", "PE-112", "TEST-PRJ", "PRFC-1021", "SDF"}
+    sample_codes = {"PE-109", "PE 109", "PE-112", "TEST-PRJ", "PRFC-1021"}
+    sample_names = {
+        "habshan 5 co2 recovery and injection",
+        "das island offshore gas gathering",
+        "custom fitting feature verification network",
+        "epsilon",
+        "ddd"
+    }
     initial_count = len(data["projects"])
     filtered = [
         p for p in data["projects"]
         if p.get("id") not in sample_ids
-        and p.get("code") not in sample_ids
-        and p.get("name") not in sample_names
+        and p.get("code") not in sample_codes
+        and (p.get("name") or "").strip().lower() not in sample_names
     ]
     if len(filtered) != initial_count:
         data["projects"] = filtered

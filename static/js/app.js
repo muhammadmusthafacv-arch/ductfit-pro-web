@@ -2719,7 +2719,7 @@ try {
             air_condition_id: state.selectedAirConditionId || "comfort_return"
         };
 
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
 
         let calculatedSuccessfully = false;
         if (!isStaticWeb) {
@@ -4849,122 +4849,46 @@ try {
 
         getDefaultData() {
             return {
-                active_project_id: "PE-109",
-                projects: [
-                    {
-                        id: "PE-109",
-                        code: "PE 109",
-                        name: "Habshan 5 CO2 Recovery and Injection",
-                        client: "ADNOC Gas Processing",
-                        contractor: "Petrofac Emirates LLC",
-                        subcontractor: "Tebodin Bilfinger LLC",
-                        notes: "CO2 Recovery and Gas Injection System - High Pressure & Standard Ductwork",
-                        unit_system: "SI",
-                        margin_pct: 15,
-                        created_at: new Date().toISOString(),
-                        fittings: [
-                            {
-                                id: "fit_pe109_1",
-                                code: "CR3-1",
-                                name: "Elbow, Smooth Radius without Vanes",
-                                category: "Elbows",
-                                shape: "rect",
-                                dimensions: "300 × 300 mm",
-                                tag: "CR3-1-F01",
-                                qty: 2,
-                                Q: 500,
-                                velocity: 5.56,
-                                pv: 18.6,
-                                f_or_Co: 0.24,
-                                coeff_type: "Co",
-                                dp: 4.5,
-                                total_dp: 9.0,
-                                notes: "Main supply riser turn",
-                                date_added: new Date().toISOString()
-                            },
-                            {
-                                id: "fit_pe109_2",
-                                code: "CR9-3",
-                                name: "Damper, Parallel & Opposed 3V Blades, Open",
-                                category: "Dampers",
-                                shape: "rect",
-                                dimensions: "225 × 225 mm",
-                                tag: "CR9-3-F02",
-                                qty: 1,
-                                Q: 57,
-                                velocity: 1.1,
-                                pv: 1.0,
-                                f_or_Co: 0.37,
-                                coeff_type: "Co",
-                                dp: 0.3,
-                                total_dp: 0.3,
-                                notes: "Fresh air intake volume control damper",
-                                date_added: new Date().toISOString()
-                            }
-                        ],
-                        duct_segments: [
-                            {
-                                id: "seg_pe109_1",
-                                tag: "DS-01",
-                                section_name: "Supply Header Main",
-                                shape: "rect",
-                                dimensions: "600 × 400 mm",
-                                unit_system: "SI",
-                                Q: 1200,
-                                velocity: 5.0,
-                                friction_rate: 0.85,
-                                length: 15.0,
-                                dp: 12.8,
-                                De: "542 mm",
-                                aspect_ratio: "1.50",
-                                notes: "Supply Header Main"
-                            }
-                        ]
-                    },
-                    {
-                        id: "PE-112",
-                        code: "PE-112",
-                        name: "Das Island Offshore Gas Gathering",
-                        client: "ADNOC Gas",
-                        contractor: "Petrofac",
-                        subcontractor: "Al Asab",
-                        notes: "Offshore HVAC distribution network",
-                        unit_system: "SI",
-                        margin_pct: 15,
-                        created_at: new Date().toISOString(),
-                        fittings: [
-                            {
-                                id: "fit_pe112_1",
-                                code: "CR9-3",
-                                name: "Damper, Parallel & Opposed 3V Blades, Open",
-                                category: "Dampers",
-                                shape: "rect",
-                                dimensions: "225 × 225 mm",
-                                tag: "CR9-3-F01",
-                                qty: 1,
-                                Q: 57,
-                                velocity: 1.1,
-                                pv: 1.0,
-                                f_or_Co: 0.37,
-                                coeff_type: "Co",
-                                dp: 0.3,
-                                total_dp: 0.3,
-                                notes: "Fresh air intake volume control damper",
-                                date_added: new Date().toISOString()
-                            }
-                        ],
-                        duct_segments: []
-                    }
-                ]
+                active_project_id: null,
+                projects: []
             };
+        },
+
+        purgeSampleProjects(data) {
+            if (!data || !Array.isArray(data.projects)) return data;
+            const sampleIds = ["PE-109", "PE-112", "TEST-PRJ", "PRFC-1021", "SDF"];
+            const sampleCodes = ["PE-109", "PE 109", "PE-112", "TEST-PRJ", "PRFC-1021"];
+            const sampleNames = [
+                "habshan 5 co2 recovery and injection",
+                "das island offshore gas gathering",
+                "custom fitting feature verification network",
+                "epsilon",
+                "ddd"
+            ];
+            const beforeLen = data.projects.length;
+            data.projects = data.projects.filter(p => {
+                const idMatch = p.id && sampleIds.includes(p.id);
+                const codeMatch = p.code && sampleCodes.includes(p.code);
+                const nameMatch = p.name && sampleNames.includes(p.name.trim().toLowerCase());
+                return !idMatch && !codeMatch && !nameMatch;
+            });
+            if (data.projects.length !== beforeLen) {
+                const validIds = data.projects.map(p => p.id);
+                if (!validIds.includes(data.active_project_id)) {
+                    data.active_project_id = data.projects[0] ? data.projects[0].id : null;
+                }
+                this.save(data);
+            }
+            return data;
         },
 
         load() {
             try {
                 const raw = localStorage.getItem(this.KEY);
                 if (raw) {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && Array.isArray(parsed.projects) && parsed.projects.length > 0) {
+                    let parsed = JSON.parse(raw);
+                    if (parsed && Array.isArray(parsed.projects)) {
+                        parsed = this.purgeSampleProjects(parsed);
                         return parsed;
                     }
                 }
@@ -5266,20 +5190,10 @@ try {
             if (resp.ok) {
                 const res = await resp.json();
                 if (res.status === "success" && res.data) {
-                    const localData = WebStorage.load();
                     const apiProjects = res.data.projects || [];
-                    const localProjects = localData.projects || [];
-                    
-                    const merged = [...localProjects];
-                    apiProjects.forEach(ap => {
-                        if (!merged.some(mp => mp.id === ap.id || mp.code === ap.code)) {
-                            merged.push(ap);
-                        }
-                    });
-
-                    state.projects = merged;
-                    state.activeProjectId = localData.active_project_id || res.data.active_project_id || (merged[0] ? merged[0].id : null);
-                    WebStorage.save({ active_project_id: state.activeProjectId, projects: merged });
+                    state.projects = apiProjects;
+                    state.activeProjectId = res.data.active_project_id || (apiProjects[0] ? apiProjects[0].id : null);
+                    WebStorage.save({ active_project_id: state.activeProjectId, projects: apiProjects });
                     loadedFromApi = true;
                 }
             }
@@ -5296,6 +5210,11 @@ try {
         renderProjectDropdown();
         if (state.activeProjectId) {
             await fetchActiveProjectDetails(state.activeProjectId);
+        } else {
+            state.activeProject = null;
+            updateProjectRibbonSnippet(null);
+            renderProjectScheduleTable(null);
+            renderSizerScheduleTable(null);
         }
     }
 
@@ -5422,7 +5341,7 @@ try {
 
     async function fetchActiveProjectDetails(projectId) {
         if (!projectId) return;
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
         let fetched = false;
         if (!isStaticWeb) {
             try {
@@ -5495,7 +5414,7 @@ try {
 
     async function switchActiveProject(projectId) {
         if (!projectId) return;
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
         if (!isStaticWeb) {
             try {
                 const resp = await fetch("/api/projects/select", {
@@ -5671,7 +5590,7 @@ try {
             project: p
         }, null, 2);
 
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
 
         // Priority 1: Native Electron Desktop Save Dialog
         if (window.electronAPI && typeof window.electronAPI.saveProjectFile === "function") {
@@ -6150,7 +6069,7 @@ ${result.filePath}`);
             created_at: new Date().toISOString()
         };
 
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
+        const isStaticWeb = (window.location.hostname.includes("netlify.app"));
         if (!isStaticWeb) {
             try {
                 const resp = await fetch("/api/projects", {
@@ -7469,6 +7388,23 @@ ${result.filePath}`);
         if (!elements.tbodyProjectSchedule) return;
         elements.tbodyProjectSchedule.innerHTML = "";
 
+        if (!p) {
+            if (elements.scheduleBarCount) elements.scheduleBarCount.textContent = "0 items";
+            elements.tbodyProjectSchedule.innerHTML = `
+                <tr>
+                    <td colspan="15" style="text-align: center; padding: 36px 16px; color: #64748b; font-style: italic;">
+                        No active project selected. Select or create a project to view fittings schedule.
+                    </td>
+                </tr>
+            `;
+            if (elements.kpiTotalFittings) elements.kpiTotalFittings.textContent = "0";
+            if (elements.kpiSubtotalDp) elements.kpiSubtotalDp.textContent = "0.0 Pa";
+            if (elements.kpiTotalDp) elements.kpiTotalDp.textContent = "0.0 Pa";
+            if (elements.kpiMaxLoss) elements.kpiMaxLoss.textContent = "0.0 Pa";
+            if (elements.kpiTotalAirflow) elements.kpiTotalAirflow.textContent = "-";
+            return;
+        }
+
         const fittings = p.fittings || [];
         const isSI = (p.unit_system || state.unit) === "SI";
         const dpUnit = isSI ? "Pa" : "in. wg";
@@ -7836,6 +7772,21 @@ ${result.filePath}`);
     function renderSizerScheduleTable(p) {
         if (!elements.tbodySizerSchedule) return;
         elements.tbodySizerSchedule.innerHTML = "";
+
+        if (!p) {
+            if (elements.sizerBarCount) elements.sizerBarCount.textContent = "0 runs";
+            elements.tbodySizerSchedule.innerHTML = `
+                <tr>
+                    <td colspan="15" style="text-align: center; padding: 36px 16px; color: #64748b; font-style: italic;">
+                        No active project selected. Select or create a project to view duct sizing schedule.
+                    </td>
+                </tr>
+            `;
+            if (elements.kpiSizerTotalRuns) elements.kpiSizerTotalRuns.textContent = "0";
+            if (elements.kpiSizerSubtotalDp) elements.kpiSizerSubtotalDp.textContent = "0.0 Pa";
+            if (elements.kpiSizerTotalDp) elements.kpiSizerTotalDp.textContent = "0.0 Pa";
+            return;
+        }
 
         const segments = p.duct_segments || [];
         const isSI = (p.unit_system || state.unit) === "SI";
