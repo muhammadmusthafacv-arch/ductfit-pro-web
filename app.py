@@ -894,12 +894,22 @@ def download_sizer_project_pdf_route(project_id):
         import project_manager
         proj = project_manager.get_project(project_id)
         if not proj:
-            return jsonify({"status": "error", "message": "Project not found"}), 404
+            data = project_manager.get_projects_data()
+            projects = data.get("projects", [])
+            for p in projects:
+                if p.get("id") == project_id or p.get("code") == project_id or p.get("code", "").replace(" ", "-") == project_id.replace(" ", "-"):
+                    proj = p
+                    break
+            if not proj and projects:
+                proj = projects[0]
+            if not proj:
+                return jsonify({"status": "error", "message": "Project not found"}), 404
+        actual_pid = proj.get("id", project_id)
         include_calc_param = request.args.get("calc", "1")
         include_calculations = include_calc_param not in ("0", "false", "no", "False")
         margin_param = request.args.get("margin")
         margin_val = float(margin_param) if margin_param is not None and margin_param != "" else None
-        pdf_bytes = pdf_report_generator.generate_sizer_project_pdf(project_id, include_calculations=include_calculations, design_margin=margin_val)
+        pdf_bytes = pdf_report_generator.generate_sizer_project_pdf(actual_pid, include_calculations=include_calculations, design_margin=margin_val)
         code_sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '_', proj.get('code', 'PROJECT'))
         filename = f"{code_sanitized}_Duct_Sizing_Report.pdf"
         return send_file(
@@ -923,12 +933,22 @@ def download_project_pdf_route(project_id):
         import project_manager
         proj = project_manager.get_project(project_id)
         if not proj:
-            return jsonify({"status": "error", "message": "Project not found"}), 404
+            data = project_manager.get_projects_data()
+            projects = data.get("projects", [])
+            for p in projects:
+                if p.get("id") == project_id or p.get("code") == project_id or p.get("code", "").replace(" ", "-") == project_id.replace(" ", "-"):
+                    proj = p
+                    break
+            if not proj and projects:
+                proj = projects[0]
+            if not proj:
+                return jsonify({"status": "error", "message": "Project not found"}), 404
+        actual_pid = proj.get("id", project_id)
         include_calc_param = request.args.get("calc", "1")
         include_calculations = include_calc_param not in ("0", "false", "no", "False")
         margin_param = request.args.get("margin")
         margin_val = float(margin_param) if margin_param is not None and margin_param != "" else None
-        pdf_bytes = pdf_report_generator.generate_project_pdf(project_id, include_calculations=include_calculations, design_margin=margin_val)
+        pdf_bytes = pdf_report_generator.generate_project_pdf(actual_pid, include_calculations=include_calculations, design_margin=margin_val)
         code_sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '_', proj.get('code', 'PROJECT'))
         filename = f"{code_sanitized}_DuctFit_Pro_Report.pdf"
         return send_file(

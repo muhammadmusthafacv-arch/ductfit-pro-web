@@ -8409,8 +8409,39 @@ ${result.filePath}`);
         const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (prj.design_margin ?? prj.margin_pct ?? 10);
         const isSizer = (state.summaryTab === "sizer");
         const reportLabel = isSizer ? "Duct Sizing Report" : "Duct Fitting Report";
+        const isStaticNetlify = (window.location.hostname === "ductfit-pro.netlify.app");
 
-        // Check for client-side DuctFitPdfReport
+        // Priority 1: When running on a server (Render or localhost), download the official ReportLab vector PDF!
+        if (!isStaticNetlify) {
+            showPrjToast(`Generating official ReportLab vector ${reportLabel} (PDF)...`);
+            const endpoint = isSizer
+                ? `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`
+                : `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
+            
+            try {
+                const resp = await fetch(endpoint);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    if (blob && blob.size > 2000) {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = blobUrl;
+                        const safeCode = (prj.code || prjId).replace(/[^a-zA-Z0-9_-]/g, "_");
+                        a.download = isSizer ? `${safeCode}_Duct_Sizing_Report.pdf` : `${safeCode}_DuctFit_Pro_Report.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(blobUrl);
+                        showPrjToast(`Official ${reportLabel} downloaded successfully!`);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn("Server PDF export failed, falling back to client PDF:", err);
+            }
+        }
+
+        // Priority 2: Client-side PDF export (for Netlify static web)
         if (typeof window.DuctFitPdfReport !== "undefined") {
             showPrjToast(`Generating official DuctFit Pro ${reportLabel} (PDF)...`);
             try {
@@ -8429,21 +8460,7 @@ ${result.filePath}`);
                 return;
             } catch (err) {
                 console.error("Client PDF generation error:", err);
-                showPrjToast("Client PDF error, attempting fallback...");
-            }
-        }
-
-        // Server fallback if running with Python backend
-        const isStaticWeb = (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1");
-        if (!isStaticWeb) {
-            if (isSizer) {
-                window.location.href = `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
-            } else {
-                window.location.href = `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
-            }
-        } else {
-            // Static web fallback: trigger print preview
-            if (typeof window.DuctFitPdfReport !== "undefined") {
+                showPrjToast("Client PDF error, opening print preview...");
                 if (isSizer) {
                     window.DuctFitPdfReport.printSizerReport(prj, { includeCalcs: includeCalcs === "1", margin: marginVal });
                 } else {

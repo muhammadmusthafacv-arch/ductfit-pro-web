@@ -1079,11 +1079,11 @@
         stage.style.left = "0";
         stage.style.top = "0";
         stage.style.width = "794px";
-        stage.style.opacity = "0.01";
+        stage.style.opacity = "1";
         stage.style.pointerEvents = "none";
         stage.style.background = "#ffffff";
         stage.style.color = "#0f172a";
-        stage.style.zIndex = "-100";
+        stage.style.zIndex = "-9999";
         stage.innerHTML = html;
         document.body.appendChild(stage);
 

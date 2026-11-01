@@ -22,9 +22,42 @@ def _get_timestamp():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_default_project_data():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    seed_file = os.path.join(base_dir, "projects.json")
+    if os.path.exists(seed_file):
+        try:
+            with open(seed_file, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict) and d.get("projects"):
+                    return d
+        except Exception:
+            pass
+    seed_api = os.path.join(base_dir, "api_projects.json")
+    if os.path.exists(seed_api):
+        try:
+            with open(seed_api, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict) and d.get("data") and d["data"].get("projects"):
+                    return d["data"]
+        except Exception:
+            pass
     return {
-        "active_project_id": None,
-        "projects": []
+        "active_project_id": "PE-109",
+        "projects": [
+            {
+                "id": "PE-109",
+                "code": "PE-109",
+                "name": "Habshan 5 CO2 Recovery and Injection",
+                "client": "ADNOC Gas Processing",
+                "contractor": "Petrofac Emirates LLC",
+                "subcontractor": "Tebodin Bilfinger LLC",
+                "notes": "CO2 Recovery and Gas Injection System - High Pressure & Standard Ductwork",
+                "unit_system": "SI",
+                "margin_pct": 15,
+                "fittings": [],
+                "duct_segments": []
+            }
+        ]
     }
 
 def cleanup_sample_projects(data):
@@ -80,7 +113,7 @@ def get_projects_data():
     try:
         with open(projects_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if not isinstance(data, dict) or "projects" not in data:
+            if not isinstance(data, dict) or not data.get("projects"):
                 data = get_default_project_data()
                 save_projects_data(data)
             else:
