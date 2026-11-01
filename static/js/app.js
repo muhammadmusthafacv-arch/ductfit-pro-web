@@ -5155,27 +5155,48 @@ try {
     }
 
     async function initProjectManager() {
-        let loadedFromApi = false;
+        const localData = (typeof WebStorage !== "undefined") ? WebStorage.load() : { projects: [] };
+        let allProjects = Array.isArray(localData.projects) ? [...localData.projects] : [];
+        let activeId = localData.active_project_id || (allProjects[0] ? allProjects[0].id : null);
+
         try {
             const resp = await fetch("/api/projects");
             if (resp.ok) {
                 const res = await resp.json();
                 if (res.status === "success" && res.data) {
                     const apiProjects = res.data.projects || [];
-                    state.projects = apiProjects;
-                    state.activeProjectId = res.data.active_project_id || (apiProjects[0] ? apiProjects[0].id : null);
-                    WebStorage.save({ active_project_id: state.activeProjectId, projects: apiProjects });
-                    loadedFromApi = true;
+                    apiProjects.forEach(ap => {
+                        const existingIdx = allProjects.findIndex(p => p.id === ap.id || p.code === ap.code);
+                        if (existingIdx >= 0) {
+                            allProjects[existingIdx] = Object.assign({}, allProjects[existingIdx], ap);
+                        } else {
+                            allProjects.push(ap);
+                        }
+                    });
+                    if (res.data.active_project_id) {
+                        activeId = res.data.active_project_id;
+                    }
                 }
             }
         } catch (err) {
-            console.warn("API /api/projects unreachable, falling back to WebStorage:", err);
+            console.warn("API /api/projects unreachable, using local storage:", err);
         }
 
-        if (!loadedFromApi) {
-            const localData = WebStorage.load();
-            state.projects = localData.projects || [];
-            state.activeProjectId = localData.active_project_id || (state.projects[0] ? state.projects[0].id : null);
+        // Auto-sync any local projects to server in background
+        if (allProjects.length > 0) {
+            allProjects.forEach(p => {
+                fetch("/api/projects/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ project: p })
+                }).catch(() => null);
+            });
+        }
+
+        state.projects = allProjects;
+        state.activeProjectId = activeId || (allProjects[0] ? allProjects[0].id : null);
+        if (typeof WebStorage !== "undefined") {
+            WebStorage.save({ active_project_id: state.activeProjectId, projects: allProjects });
         }
 
         renderProjectDropdown();
@@ -5220,7 +5241,7 @@ try {
             }
         });
 
-        const cur = state.projects.find(p => p.id === state.activeProjectId) || state.projects[0];
+        const cur = state.projects.find(p => p.id === state.activeProjectId) || state.activeProject || state.projects[0];
         if (cur && cur.id !== state.activeProjectId) {
             state.activeProjectId = cur.id;
         }
@@ -5336,6 +5357,11 @@ try {
             if (proj) {
                 state.activeProject = proj;
                 state.activeProjectId = proj.id;
+                if (!state.projects) state.projects = [];
+                if (!state.projects.some(p => p.id === proj.id || p.code === proj.code)) {
+                    state.projects.push(proj);
+                }
+                renderProjectDropdown();
                 updateProjectRibbonSnippet(proj);
                 if (elements.selectActiveProject) {
                     elements.selectActiveProject.value = proj.id;
