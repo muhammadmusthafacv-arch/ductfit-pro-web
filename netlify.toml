@@ -8,6 +8,13 @@
   status = 200
   force = true
 
+# Master Catalog PDF Export
+[[redirects]]
+  from = "/api/catalog/pdf"
+  to = "/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf"
+  status = 200
+  force = true
+
 # High-performance static routing for catalog tree, version, and projects
 [[redirects]]
   from = "/api/tree"

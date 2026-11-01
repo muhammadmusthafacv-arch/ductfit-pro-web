@@ -2547,6 +2547,13 @@ try {
                 steps: state.activeData?.steps || []
             };
 
+            // Use client-side PDF engine on static web / Netlify
+            if (typeof window.DuctFitPdfReport !== "undefined") {
+                await window.DuctFitPdfReport.exportCalculationPdf(payload);
+                showPrjToast("Calculation PDF downloaded successfully!");
+                return;
+            }
+
             const response = await fetch("/api/calculations/pdf", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2567,9 +2574,18 @@ try {
             a.remove();
             window.URL.revokeObjectURL(downloadUrl);
 
-            showPrjToast("📄 Calculation PDF downloaded successfully!");
+            showPrjToast("Calculation PDF downloaded successfully!");
         } catch (err) {
             console.error("Calculation PDF download failed:", err);
+            if (typeof window.DuctFitPdfReport !== "undefined") {
+                try {
+                    await window.DuctFitPdfReport.exportCalculationPdf(payload);
+                    showPrjToast("Calculation PDF downloaded successfully!");
+                    return;
+                } catch (err2) {
+                    console.error("Client fallback calculation PDF failed:", err2);
+                }
+            }
             showPrjToast("Error generating calculation PDF.");
         }
     }
@@ -2583,25 +2599,18 @@ try {
         showPrjToast("Downloading Master ASHRAE Fitting Catalog PDF (234 Fittings)...");
 
         try {
-            const response = await fetch("/api/catalog/pdf");
-            if (!response.ok) {
-                throw new Error("Server returned " + response.status);
-            }
-
-            const blob = await response.blob();
-            const downloadUrl = window.URL.createObjectURL(blob);
+            const directUrl = "/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
             const a = document.createElement("a");
-            a.href = downloadUrl;
+            a.href = directUrl;
             a.download = "ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
             document.body.appendChild(a);
             a.click();
             a.remove();
-            window.URL.revokeObjectURL(downloadUrl);
 
-            showPrjToast("📄 Master ASHRAE Catalog PDF downloaded successfully!");
+            showPrjToast("Master ASHRAE Catalog PDF downloaded successfully!");
         } catch (err) {
             console.error("Master catalog PDF download failed:", err);
-            window.location.href = "/api/catalog/pdf";
+            window.location.href = "/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf";
         }
     }
 
@@ -8342,30 +8351,74 @@ try {
         return `"${str}"`;
     }
 
-    function downloadFitductPdf() {
-        const prjId = state.activeProjectId;
-        if (!prjId) {
+    async function downloadFitductPdf() {
+        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
+        const prjId = state.activeProjectId || (prj ? prj.id : null);
+        if (!prj || !prjId) {
             showPrjToast("Please select or create an active project first.");
             return;
         }
 
         const includeCalcs = elements.chkIncludeCalculations ? (elements.chkIncludeCalculations.checked ? "1" : "0") : "1";
-        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (state.activeProject?.design_margin ?? 10);
+        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (prj.design_margin ?? prj.margin_pct ?? 10);
+        const isSizer = (state.summaryTab === "sizer");
+        const reportLabel = isSizer ? "Duct Sizing Report" : "Duct Fitting Report";
 
-        if (state.summaryTab === "sizer") {
-            showPrjToast(includeCalcs === "1"
-                ? "Generating official DuctFit Pro Duct Sizing Report with calculations (PDF)..."
-                : "Generating official DuctFit Pro Duct Sizing Report without calculations (PDF)...");
+        // Check for client-side DuctFitPdfReport
+        if (typeof window.DuctFitPdfReport !== "undefined") {
+            showPrjToast(`Generating official DuctFit Pro ${reportLabel} (PDF)...`);
+            try {
+                if (isSizer) {
+                    await window.DuctFitPdfReport.exportProjectSizerPdf(prj, {
+                        includeCalcs: includeCalcs === "1",
+                        margin: marginVal
+                    });
+                } else {
+                    await window.DuctFitPdfReport.exportProjectFittingPdf(prj, {
+                        includeCalcs: includeCalcs === "1",
+                        margin: marginVal
+                    });
+                }
+                showPrjToast(`Official ${reportLabel} downloaded successfully!`);
+                return;
+            } catch (err) {
+                console.error("Client PDF generation error:", err);
+                showPrjToast("Client PDF error, attempting fallback...");
+            }
+        }
+
+        // Server fallback if running with Python backend
+        if (isSizer) {
             window.location.href = `/api/projects/${encodeURIComponent(prjId)}/sizer-pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
         } else {
-            showPrjToast(includeCalcs === "1"
-                ? "Generating official DuctFit Pro Duct Fitting Report with calculations (PDF)..."
-                : "Generating official DuctFit Pro Duct Fitting Report without calculations (PDF)...");
             window.location.href = `/api/projects/${encodeURIComponent(prjId)}/pdf?calc=${includeCalcs}&margin=${encodeURIComponent(marginVal)}`;
         }
     }
 
     function printProjectReport() {
+        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
+        if (!prj) {
+            showPrjToast("Please select or create an active project first.");
+            return;
+        }
+        const includeCalcs = elements.chkIncludeCalculations ? (elements.chkIncludeCalculations.checked ? "1" : "0") : "1";
+        const marginVal = elements.inputProjectDesignMargin ? elements.inputProjectDesignMargin.value : (prj.design_margin ?? prj.margin_pct ?? 10);
+        const isSizer = (state.summaryTab === "sizer");
+
+        if (typeof window.DuctFitPdfReport !== "undefined") {
+            if (isSizer) {
+                window.DuctFitPdfReport.printSizerReport(prj, {
+                    includeCalcs: includeCalcs === "1",
+                    margin: marginVal
+                });
+            } else {
+                window.DuctFitPdfReport.printFittingReport(prj, {
+                    includeCalcs: includeCalcs === "1",
+                    margin: marginVal
+                });
+            }
+            return;
+        }
         window.print();
     }
 
