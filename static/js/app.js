@@ -5752,20 +5752,47 @@
                 return;
             }
 
-            const resp = await fetch("/api/projects/validate-archive", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ archive: archiveData })
-            });
-            const res = await resp.json();
-            if (res.status !== "success" || !res.data || !res.data.valid) {
-                showToastNotification("❌ " + (res.data && res.data.error ? res.data.error : (res.message || "Invalid archive format")), 4000);
+            const p = archiveData.project || archiveData;
+            if (!p || (!p.code && !p.id) || !p.name) {
+                showToastNotification("❌ Invalid archive: missing Project Code or Name.", 4000);
                 return;
             }
 
+            const existingProjects = (state.projects && state.projects.length > 0) ? state.projects : WebStorage.load().projects;
+            const conflictPrj = existingProjects.find(ep => ep.code === p.code || ep.id === p.id);
+            const hasConflict = Boolean(conflictPrj);
+
+            const fits = p.fittings || [];
+            const segs = p.duct_segments || [];
+            let totalDp = 0;
+            fits.forEach(f => {
+                totalDp += Number(f.total_dp || ((Number(f.dp) || 0) * (Number(f.qty) || 1)));
+            });
+
+            const summary = {
+                project_id: p.id || ("PRJ-" + Date.now().toString(36).toUpperCase()),
+                code: p.code || p.id,
+                name: p.name,
+                client: p.client || "-",
+                contractor: p.contractor || "-",
+                subcontractor: p.subcontractor || "-",
+                fittings_count: fits.length,
+                duct_segments_count: segs.length,
+                total_dp: Math.round(totalDp * 10) / 10,
+                unit_system: p.unit_system || state.unit || "SI",
+                design_margin: p.margin_pct || 15
+            };
+
+            const valData = {
+                valid: true,
+                has_conflict: hasConflict,
+                conflict_info: hasConflict ? { existing_code: conflictPrj.code } : {},
+                summary: summary
+            };
+
             state.pendingArchiveData = archiveData;
-            state.pendingArchiveSummary = res.data.summary;
-            openImportArchiveModal(res.data);
+            state.pendingArchiveSummary = summary;
+            openImportArchiveModal(valData);
         } catch (err) {
             console.error("Archive import error:", err);
             showToastNotification("❌ Failed to process archive: " + err.message, 4000);
@@ -5859,30 +5886,38 @@
         }
 
         try {
-            const resp = await fetch("/api/projects/import-archive", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    archive: archiveData,
-                    conflict_resolution: mode
-                })
-            });
-            const res = await resp.json();
-            if (res.status === "success" && res.data) {
-                closeImportArchiveModal();
-                await initProjectManager();
-                await switchActiveProject(res.data.id);
-                const actionTxt = mode === "overwrite" ? "updated & replaced" : "retrieved as new project";
-                showToastNotification(`✅ Project "${res.data.code}" ${actionTxt} successfully!`, 4000);
-                if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
-                    renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
-                }
-            } else {
-                showToastNotification("❌ " + (res.message || "Failed to import project"), 4000);
+            const rawProj = archiveData.project || archiveData;
+            const newProj = JSON.parse(JSON.stringify(rawProj));
+
+            if (mode === "copy" || !newProj.id) {
+                newProj.id = "PRJ-" + Date.now().toString(36).toUpperCase();
+                newProj.code = newProj.code + "-COPY";
+                newProj.name = newProj.name + " (Copy)";
+            }
+
+            WebStorage.updateProject(newProj);
+            state.projects = WebStorage.load().projects;
+            state.activeProjectId = newProj.id;
+            state.activeProject = newProj;
+
+            closeImportArchiveModal();
+            renderProjectDropdown();
+            updateProjectRibbonSnippet(newProj);
+            if (elements.selectActiveProject) {
+                elements.selectActiveProject.value = newProj.id;
+            }
+            renderProjectScheduleTable(newProj);
+            renderSizerScheduleTable(newProj);
+            updateProjectRibbonBadge();
+
+            const actionTxt = mode === "overwrite" ? "updated & replaced" : "retrieved as new project";
+            showToastNotification(`✅ Project "${newProj.code}" ${actionTxt} successfully!`, 4000);
+            if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+                renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
             }
         } catch (err) {
-            console.error("Confirm import error:", err);
-            showToastNotification("❌ Error importing project: " + err.message, 4000);
+            console.error("Archive import error:", err);
+            showToastNotification("❌ Import failed: " + err.message, 4000);
         } finally {
             if (elements.btnConfirmImportArchive) {
                 elements.btnConfirmImportArchive.disabled = false;

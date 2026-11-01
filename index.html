@@ -7,6 +7,52 @@
     <link rel="icon" type="image/x-icon" href="/static/icon.ico">
     <link rel="stylesheet" href="/static/css/style.css?v=1.0.12_archive">
     <link rel="stylesheet" href="/static/katex/katex.min.css">
+    <style id="hide-netlify-hud">
+        [data-netlify-drawer],
+        netlify-drawer,
+        #netlify-badge,
+        .netlify-badge,
+        [class*="netlify-"],
+        div[id*="netlify"],
+        iframe[src*="netlify"],
+        [data-netlify-site-id] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+            top: -9999px !important;
+        }
+    </style>
+    <script>
+        (function() {
+            const kill = () => {
+                document.querySelectorAll('netlify-drawer, [data-netlify-drawer], [class*="netlify-hud"], #netlify-badge, .netlify-badge, iframe[src*="netlify"], [data-netlify-site-id]').forEach(el => el.remove());
+            };
+            kill();
+            document.addEventListener('DOMContentLoaded', kill);
+            window.addEventListener('load', kill);
+            if (typeof MutationObserver !== 'undefined') {
+                new MutationObserver((mutations) => {
+                    for (const m of mutations) {
+                        for (const node of m.addedNodes) {
+                            if (node.nodeType === 1) {
+                                const tag = (node.tagName || '').toLowerCase();
+                                const id = (node.id || '').toLowerCase();
+                                const cls = (typeof node.className === 'string' ? node.className : '').toLowerCase();
+                                if (tag.includes('netlify') || id.includes('netlify') || cls.includes('netlify')) {
+                                    node.remove();
+                                }
+                            }
+                        }
+                    }
+                }).observe(document.documentElement, { childList: true, subtree: true });
+            }
+        })();
+    </script>
 </head>
 <body>
 

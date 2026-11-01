@@ -1,7 +1,14 @@
 [build]
   publish = "."
 
-# High-performance static routing for catalog tree and version
+# Neutralize Netlify HUD / Powered by Netlify badge script
+[[redirects]]
+  from = "/.netlify/scripts/hud*"
+  to = "/empty.js"
+  status = 200
+  force = true
+
+# High-performance static routing for catalog tree, version, and projects
 [[redirects]]
   from = "/api/tree"
   to = "/api_tree.json"
