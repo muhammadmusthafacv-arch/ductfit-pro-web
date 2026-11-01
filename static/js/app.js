@@ -8017,38 +8017,50 @@ ${result.filePath}`);
         if (!state.activeProjectId || !fittingId) return;
         const q = Math.max(1, parseInt(newQty, 10) || 1);
 
+        // 1. Immediately update in-memory and WebStorage for instant UI feedback
+        const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
+        let foundFitting = null;
+        if (prj && prj.fittings) {
+            foundFitting = prj.fittings.find(f => f.id === fittingId || f.tag === fittingId);
+            if (foundFitting) {
+                foundFitting.qty = q;
+                foundFitting.total_dp = Number(((Number(foundFitting.dp) || 0) * q).toFixed(2));
+                if (typeof WebStorage !== "undefined") {
+                    WebStorage.updateProject(prj);
+                }
+                state.activeProject = prj;
+                renderProjectScheduleTable(prj);
+                updateProjectRibbonBadge();
+            }
+        }
+
+        // 2. Sync to server seamlessly without blocking alerts
         try {
             const resp = await fetch(`/api/projects/${encodeURIComponent(state.activeProjectId)}/fittings/${encodeURIComponent(fittingId)}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ qty: q })
+                body: JSON.stringify({ qty: q, project_data: prj })
             });
-            const res = await resp.json();
-            if (res.status === "success") {
-                await fetchActiveProjectDetails(state.activeProjectId);
-                renderProjectScheduleTable(state.activeProject);
-                updateProjectRibbonBadge();
-                const tagStr = (res.data && res.data.tag) ? res.data.tag : "Fitting";
+            const res = await resp.json().catch(() => null);
+            if (res && res.status === "success") {
+                const tagStr = (res.data && res.data.tag) ? res.data.tag : (foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting");
                 showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
-            } else {
-                alert(`Error updating quantity: ${res.message || "Failed to update"}`);
-                if (state.activeProject) renderProjectScheduleTable(state.activeProject);
+            } else if (prj) {
+                // If fitting was not found on server, auto-sync full project to server
+                try {
+                    await fetch("/api/projects/sync", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ project: prj })
+                    });
+                } catch (e) {}
+                const tagStr = foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting";
+                showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
             }
         } catch (err) {
-            console.warn("Server unavailable, updating quantity in local storage:", err);
-            const prj = state.activeProject || WebStorage.getActiveProject();
-            if (prj && prj.fittings) {
-                const item = prj.fittings.find(f => f.id === fittingId);
-                if (item) {
-                    item.qty = q;
-                    item.total_dp = (Number(item.dp) || 0) * q;
-                    WebStorage.updateProject(prj);
-                    state.activeProject = prj;
-                    renderProjectScheduleTable(prj);
-                    updateProjectRibbonBadge();
-                    showPrjToast(`✓ Updated [${item.tag || item.code}] quantity to ${q}`);
-                }
-            }
+            console.warn("Server unavailable, updated quantity in local state:", err);
+            const tagStr = foundFitting ? (foundFitting.tag || foundFitting.code) : "Fitting";
+            showPrjToast(`✓ Updated [${tagStr}] quantity to ${q}`);
         }
     }
 
@@ -8079,7 +8091,25 @@ ${result.filePath}`);
                     }
                 }, 60);
             } else {
-                alert(res.message || "Failed to duplicate fitting.");
+                // Fallback local duplicate
+                const prj = state.activeProject || (typeof WebStorage !== "undefined" ? WebStorage.getActiveProject() : null);
+                if (prj && prj.fittings) {
+                    const item = prj.fittings.find(f => f.id === fittingId || f.tag === fittingId);
+                    if (item) {
+                        const clone = JSON.parse(JSON.stringify(item));
+                        clone.id = "fit_" + Date.now().toString(36);
+                        clone.tag = (clone.tag || item.code) + "-COPY";
+                        prj.fittings.push(clone);
+                        if (typeof WebStorage !== "undefined") WebStorage.updateProject(prj);
+                        state.activeProject = prj;
+                        try {
+                            fetch("/api/projects/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: prj }) });
+                        } catch (e) {}
+                        renderProjectScheduleTable(prj);
+                        updateProjectRibbonBadge();
+                        showPrjToast(`📋 Duplicated ${clone.tag} to end of schedule`);
+                    }
+                }
             }
         } catch (err) {
             console.warn("Server unavailable, duplicating fitting in local storage:", err);

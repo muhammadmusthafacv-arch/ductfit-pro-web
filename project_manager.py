@@ -30,12 +30,9 @@ def get_default_project_data():
 def cleanup_sample_projects(data):
     if not isinstance(data, dict) or "projects" not in data:
         return False
-    sample_ids = {"PE-109", "PE-112", "TEST-PRJ", "PRFC-1021", "SDF"}
-    sample_codes = {"PE-109", "PE 109", "PE-112", "TEST-PRJ", "PRFC-1021"}
+    sample_ids = {"PRFC-1021", "SDF"}
+    sample_codes = {"PRFC-1021"}
     sample_names = {
-        "habshan 5 co2 recovery and injection",
-        "das island offshore gas gathering",
-        "custom fitting feature verification network",
         "epsilon",
         "ddd"
     }
@@ -169,8 +166,9 @@ def renumber_fittings(fittings_list):
 
 def get_project(project_id):
     data = get_projects_data()
+    pid_clean = str(project_id).replace(" ", "-")
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if p.get("id") == project_id or p.get("code") == project_id or str(p.get("code", "")).replace(" ", "-") == pid_clean:
             if p.get("fittings"):
                 renumber_fittings(p["fittings"])
             return p
@@ -358,10 +356,11 @@ def delete_fitting_from_project(project_id, fitting_id):
 
 def update_fitting_qty(project_id, fitting_id, new_qty):
     data = get_projects_data()
+    pid_clean = str(project_id).replace(" ", "-")
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if p.get("id") == project_id or p.get("code") == project_id or str(p.get("code", "")).replace(" ", "-") == pid_clean:
             for f in p.get("fittings", []):
-                if f.get("id") == fitting_id:
+                if f.get("id") == fitting_id or f.get("tag") == fitting_id or str(f.get("item_no")) == str(fitting_id):
                     try:
                         q = max(1, int(new_qty))
                         f["qty"] = q

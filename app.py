@@ -420,6 +420,10 @@ def update_fitting_route(project_id, fitting_id):
     """Update fitting quantity or full calculation properties in project"""
     try:
         data = request.get_json() or {}
+        # If client provided fallback project_data (auto-upsert)
+        if "project_data" in data and isinstance(data["project_data"], dict):
+            project_manager.upsert_project(data["project_data"])
+        
         if "inputs" in data or "dimensions" in data or "dp" in data:
             fit = project_manager.update_fitting_in_project(project_id, fitting_id, data)
         else:
