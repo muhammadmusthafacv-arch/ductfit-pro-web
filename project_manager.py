@@ -28,27 +28,7 @@ def get_default_project_data():
     }
 
 def cleanup_sample_projects(data):
-    if not isinstance(data, dict) or "projects" not in data:
-        return False
-    sample_ids = {"PRFC-1021", "SDF"}
-    sample_codes = {"PRFC-1021"}
-    sample_names = {
-        "epsilon",
-        "ddd"
-    }
-    initial_count = len(data["projects"])
-    filtered = [
-        p for p in data["projects"]
-        if p.get("id") not in sample_ids
-        and p.get("code") not in sample_codes
-        and (p.get("name") or "").strip().lower() not in sample_names
-    ]
-    if len(filtered) != initial_count:
-        data["projects"] = filtered
-        valid_ids = {p.get("id") for p in filtered}
-        if data.get("active_project_id") not in valid_ids:
-            data["active_project_id"] = filtered[0]["id"] if filtered else None
-        return True
+    # Do not auto-delete any user created projects
     return False
 
 def sanitize_project_strings(obj):

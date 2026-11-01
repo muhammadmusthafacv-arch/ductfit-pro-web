@@ -4854,41 +4854,12 @@ try {
             };
         },
 
-        purgeSampleProjects(data) {
-            if (!data || !Array.isArray(data.projects)) return data;
-            const sampleIds = ["PE-109", "PE-112", "TEST-PRJ", "PRFC-1021", "SDF"];
-            const sampleCodes = ["PE-109", "PE 109", "PE-112", "TEST-PRJ", "PRFC-1021"];
-            const sampleNames = [
-                "habshan 5 co2 recovery and injection",
-                "das island offshore gas gathering",
-                "custom fitting feature verification network",
-                "epsilon",
-                "ddd"
-            ];
-            const beforeLen = data.projects.length;
-            data.projects = data.projects.filter(p => {
-                const idMatch = p.id && sampleIds.includes(p.id);
-                const codeMatch = p.code && sampleCodes.includes(p.code);
-                const nameMatch = p.name && sampleNames.includes(p.name.trim().toLowerCase());
-                return !idMatch && !codeMatch && !nameMatch;
-            });
-            if (data.projects.length !== beforeLen) {
-                const validIds = data.projects.map(p => p.id);
-                if (!validIds.includes(data.active_project_id)) {
-                    data.active_project_id = data.projects[0] ? data.projects[0].id : null;
-                }
-                this.save(data);
-            }
-            return data;
-        },
-
         load() {
             try {
                 const raw = localStorage.getItem(this.KEY);
                 if (raw) {
-                    let parsed = JSON.parse(raw);
+                    const parsed = JSON.parse(raw);
                     if (parsed && Array.isArray(parsed.projects)) {
-                        parsed = this.purgeSampleProjects(parsed);
                         return parsed;
                     }
                 }
@@ -5446,11 +5417,23 @@ try {
 
     // --- All Projects Management (View, Search, Edit, Delete) ---
 
-    function openAllProjectsModal() {
+    async function openAllProjectsModal() {
         if (!elements.allProjectsModal) return;
         if (elements.inputFilterAllProjects) {
             elements.inputFilterAllProjects.value = "";
         }
+        try {
+            const resp = await fetch("/api/projects");
+            if (resp.ok) {
+                const res = await resp.json();
+                if (res.status === "success" && res.data && Array.isArray(res.data.projects)) {
+                    state.projects = res.data.projects;
+                    if (typeof WebStorage !== "undefined") {
+                        WebStorage.save({ active_project_id: state.activeProjectId, projects: res.data.projects });
+                    }
+                }
+            }
+        } catch (e) {}
         renderAllProjectsTable("");
         elements.allProjectsModal.classList.remove("hidden");
         if (elements.inputFilterAllProjects) {
@@ -6054,8 +6037,9 @@ ${result.filePath}`);
             return;
         }
 
+        const cleanId = code.replace(/\s+/g, '-').toUpperCase();
         const newPrj = {
-            id: "PRJ-" + Date.now().toString(36).toUpperCase(),
+            id: cleanId || ("PRJ-" + Date.now().toString(36).toUpperCase()),
             code: code,
             name: name,
             client: client,
@@ -6082,13 +6066,14 @@ ${result.filePath}`);
                         contractor: contractor,
                         subcontractor: subcontractor,
                         notes: notes,
-                        unit_system: state.unit
+                        unit_system: state.unit || "SI"
                     })
                 });
                 if (resp.ok) {
                     const res = await resp.json().catch(() => null);
-                    if (res && res.status === "success" && res.data && res.data.id) {
-                        newPrj.id = res.data.id;
+                    if (res && res.status === "success" && res.data) {
+                        if (res.data.id) newPrj.id = res.data.id;
+                        Object.assign(newPrj, res.data);
                     }
                 }
             } catch (err) {
@@ -6099,7 +6084,15 @@ ${result.filePath}`);
         if (typeof WebStorage !== "undefined") {
             WebStorage.createProject(newPrj);
         }
-        state.projects = WebStorage.load().projects;
+
+        if (!state.projects) state.projects = [];
+        const existingIdx = state.projects.findIndex(p => p.id === newPrj.id || p.code === newPrj.code);
+        if (existingIdx >= 0) {
+            state.projects[existingIdx] = newPrj;
+        } else {
+            state.projects.unshift(newPrj);
+        }
+
         state.activeProjectId = newPrj.id;
         state.activeProject = newPrj;
 
@@ -6112,6 +6105,11 @@ ${result.filePath}`);
         renderProjectScheduleTable(newPrj);
         renderSizerScheduleTable(newPrj);
         updateProjectRibbonBadge();
+
+        if (elements.allProjectsModal && !elements.allProjectsModal.classList.contains("hidden")) {
+            renderAllProjectsTable(elements.inputFilterAllProjects ? elements.inputFilterAllProjects.value : "");
+        }
+
         showPrjToast(`✨ Project "${code} - ${name}" created & selected!`);
     }
 
