@@ -1,15 +1,27 @@
 [build]
   publish = "."
 
+# High-performance static routing for catalog tree and version
+[[redirects]]
+  from = "/api/tree"
+  to = "/fittings_tree.json"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/version"
+  to = "/version.json"
+  status = 200
+  force = true
+
 # Netlify routing: proxies backend API to the live cloud engine
-# (Placeholder: replace with your backend service URL upon deployment)
 [[redirects]]
   from = "/api/*"
   to = "https://ductfit-pro-api.onrender.com/api/:splat"
   status = 200
   force = true
 
-# Single Page App routing for HTML5 pushState
+# Single Page App fallback routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
