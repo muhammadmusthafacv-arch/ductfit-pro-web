@@ -1,3 +1,7 @@
+try {
+    localStorage.setItem("nl-hud:public:v1", "hidden");
+    localStorage.setItem("nl-hud:owner-private:v1", "hidden");
+} catch(e) {}
 /**
  * ASHRAE Duct Fitting Database & Sizer Logic v6.0
  * Authentic reproduction of ASHRAE Database v5.0 / v6.0 + Integrated Duct Sizer

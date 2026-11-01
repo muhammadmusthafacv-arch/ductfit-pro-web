@@ -5183,3 +5183,22 @@ input[type="number"],
 
 /* Hide Netlify Badge & HUD completely */
 [data-netlify-drawer], netlify-drawer, #netlify-badge, .netlify-badge, [class*='netlify-'], div[id*='netlify'], iframe[src*='netlify'], [data-netlify-site-id] { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; width: 0 !important; height: 0 !important; position: absolute !important; left: -9999px !important; top: -9999px !important; }
+
+#nl-badge-frame,
+#nl-hud-frame,
+iframe[title*="Netlify"],
+iframe[title*="Powered by Netlify"],
+[data-netlify-drawer],
+netlify-drawer,
+#netlify-badge,
+.netlify-badge {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: -9999px !important;
+}

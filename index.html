@@ -7,15 +7,15 @@
     <link rel="icon" type="image/x-icon" href="/static/icon.ico">
     <link rel="stylesheet" href="/static/css/style.css?v=1.0.12_archive">
     <link rel="stylesheet" href="/static/katex/katex.min.css">
-    <style id="hide-netlify-hud">
+        <style id="hide-netlify-hud">
+        #nl-badge-frame,
+        #nl-hud-frame,
+        iframe[title*="Netlify"],
+        iframe[title*="Powered by Netlify"],
         [data-netlify-drawer],
         netlify-drawer,
         #netlify-badge,
-        .netlify-badge,
-        [class*="netlify-"],
-        div[id*="netlify"],
-        iframe[src*="netlify"],
-        [data-netlify-site-id] {
+        .netlify-badge {
             display: none !important;
             visibility: hidden !important;
             opacity: 0 !important;
@@ -28,24 +28,33 @@
         }
     </style>
     <script>
+        try {
+            localStorage.setItem("nl-hud:public:v1", "hidden");
+            localStorage.setItem("nl-hud:owner-private:v1", "hidden");
+        } catch(e) {}
         (function() {
             const kill = () => {
-                document.querySelectorAll('netlify-drawer, [data-netlify-drawer], [class*="netlify-hud"], #netlify-badge, .netlify-badge, iframe[src*="netlify"], [data-netlify-site-id]').forEach(el => el.remove());
+                document.querySelectorAll('#nl-badge-frame, #nl-hud-frame, iframe[title*="Netlify"]').forEach(el => {
+                    if (el.tagName === 'IFRAME') el.remove();
+                });
             };
             kill();
-            document.addEventListener('DOMContentLoaded', kill);
+            document.addEventListener('DOMContentLoaded', () => {
+                kill();
+                if (!document.getElementById("nl-badge-frame")) {
+                    const dummy = document.createElement("div");
+                    dummy.id = "nl-badge-frame";
+                    dummy.style.display = "none";
+                    document.body.appendChild(dummy);
+                }
+            });
             window.addEventListener('load', kill);
             if (typeof MutationObserver !== 'undefined') {
                 new MutationObserver((mutations) => {
                     for (const m of mutations) {
                         for (const node of m.addedNodes) {
-                            if (node.nodeType === 1) {
-                                const tag = (node.tagName || '').toLowerCase();
-                                const id = (node.id || '').toLowerCase();
-                                const cls = (typeof node.className === 'string' ? node.className : '').toLowerCase();
-                                if (tag.includes('netlify') || id.includes('netlify') || cls.includes('netlify')) {
-                                    node.remove();
-                                }
+                            if (node.nodeType === 1 && (node.id === 'nl-badge-frame' || node.id === 'nl-hud-frame' || (node.title && node.title.includes('Netlify')))) {
+                                if (node.tagName === 'IFRAME') node.remove();
                             }
                         }
                     }
