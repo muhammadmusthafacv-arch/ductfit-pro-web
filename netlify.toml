@@ -4,7 +4,7 @@
 # High-performance static routing for catalog tree and version
 [[redirects]]
   from = "/api/tree"
-  to = "/fittings_tree.json"
+  to = "/api_tree.json"
   status = 200
   force = true
 
