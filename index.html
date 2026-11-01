@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DuctFit Pro v1.0.15 - ASHRAE Fundamentals (Ch. 21)</title>
+    <link rel="icon" type="image/x-icon" href="/static/icon.ico">
+    <link rel="stylesheet" href="/static/css/style.css?v=1.0.12_archive">
+    <link rel="stylesheet" href="/static/katex/katex.min.css">
+</head>
+<body>
+
+    <div class="app-layout">
+        <!-- LEFT COLUMN: Authentic Windows Explorer Tree Browser -->
+        <aside class="sidebar-panel catalog-sidebar" id="catalogSidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title">
+                    <span class="tree-icon-root">📁</span>
+                    <span>DuctFit Pro Fitting Catalog</span>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="treeSearchInput" placeholder="🔍 Search fitting code or name..." autocomplete="off">
+                    <button type="button" id="btnClearTreeSearch" class="tree-search-clear-btn hidden" title="Clear search text">&times;</button>
+                </div>
+                <div class="tree-action-bar">
+                    <button type="button" id="btnExpandAll" class="tree-mini-btn" title="Expand all catalog categories">Expand All</button>
+                    <button type="button" id="btnCollapseAll" class="tree-mini-btn" title="Collapse all catalog categories">Collapse All</button>
+                    <button type="button" id="btnFittingCodeGuide" class="tree-mini-btn btn-code-guide" title="ASHRAE Duct Fitting Coding Details (Table 5)">
+                        <span class="btn-icon">ℹ️</span> Code Details
+                    </button>
+                </div>
+                <div class="tree-action-bar" style="margin-top: 4px;">
+                    <a href="/api/catalog/pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnDownloadCatalogPdf" class="tree-mini-btn btn-catalog-pdf" title="Download Master ASHRAE Catalog PDF (Complete 62-page report for all 234 fittings &amp; process flow architecture)" style="text-decoration: none; background: #0284c7; color: #ffffff; border-color: #0369a1; font-weight: 700; width: 100%;">
+                        <span class="btn-icon">📥</span> Export Master Catalog PDF (234 Fittings)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Tree Not Found Notification -->
+            <div id="treeNotFound" class="tree-not-found hidden">
+                <span>⚠️ Fitting Not Found</span>
+            </div>
+
+            <!-- Scrollable Hierarchical Tree Container -->
+            <div class="tree-container" id="treeViewContainer">
+                <div class="tree-loading">Loading DuctFit Pro Fitting Tree...</div>
+            </div>
+
+            <div class="sidebar-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                <a href="/api/catalog/pdf" download="ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf" id="btnSidebarMasterPdf" style="color: #0284c7; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;" title="Download Master ASHRAE Catalog PDF">
+                    <span>📄</span> Master PDF
+                </a>
+                <span id="catalogItemCount">234 Fittings Available</span>
+            </div>
+        </aside>
+
+        <!-- Resizable Splitter Handle for Dragging Catalog Width -->
+        <div class="sidebar-resizer" id="catalogResizer" title="Click and drag to enlarge or shrink DuctFit Pro Fitting Catalog area (Double-click to toggle wide view)"></div>
+
+        <!-- RIGHT COLUMN: Main Calculation & CAD Drafting Panel -->
+        <main class="main-content-panel">
+            <!-- Top Command & Settings Bar -->
+            <div class="top-nav-bar">
+                <div class="nav-left">
+                    <img src="/static/icon.png" alt="DuctFit Pro Logo" class="app-brand-logo">
+                    <span class="app-brand">DuctFit Pro</span>
+                    <span class="app-badge" id="appHandbookBadge">ASHRAE Fundamentals (Ch. 21)</span>
+                </div>
+
+                <div class="nav-center">
+                    <div class="mode-toggle-group">
+                        <button type="button" class="mode-btn" id="btnModeSizer" title="Auto-size duct cross-sections using ASHRAE Equal Friction or Velocity Constraint Methods (Project-Specific Target)">
+                            Auto Duct Sizer
+                        </button>
+                        <button type="button" class="mode-btn active" id="btnModeDirect" title="Calculate friction loss and velocity for given duct dimensions">
+                            Fitting Loss Analysis
+                        </button>
+                    </div>
+                </div>
+
+                <div class="nav-right">
+                    <div class="unit-toggle-group">
+                        <button type="button" class="unit-btn active" id="btnUnitSI" data-unit="SI">SI (Metric)</button>
+                        <button type="button" class="unit-btn" id="btnUnitIP" data-unit="IP">IP (English)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Project & Project Management Ribbon Bar -->
+            <div class="project-ribbon-bar" id="projectRibbonBar">
+                <div class="prj-ribbon-left">
+                    <span class="prj-icon">📁</span>
+                    <span class="prj-label">Project:</span>
+
+                    <!-- Searchable Project Selector with Live Search & Click-to-Activate -->
+                    <div class="prj-search-combo" id="prjSearchCombo">
+                        <button type="button" class="prj-combo-trigger" id="prjComboTrigger" title="Click or type to search and select current project">
+                            <span class="prj-combo-icon">📁</span>
+                            <span class="prj-combo-selected" id="prjComboSelectedText">-- Loading Projects... --</span>
+                            <span class="prj-combo-arrow">▾</span>
+                        </button>
+                        
+                        <div class="prj-combo-dropdown hidden" id="prjComboDropdown">
+                            <div class="prj-combo-search-row">
+                                <span class="prj-combo-search-icon">🔍</span>
+                                <input type="text" id="prjComboSearchInput" class="prj-combo-input" placeholder="Search project code, name, client..." autocomplete="off">
+                                <button type="button" id="btnClearComboSearch" class="btn-clear-search hidden" title="Clear search">&times;</button>
+                            </div>
+                            <div class="prj-combo-list" id="prjComboList">
+                                <!-- Populated dynamically -->
+                            </div>
+                            <div class="prj-combo-footer">
+                                <button type="button" class="btn-combo-footer-action" id="btnComboImportProject" title="Retrieve an archived project or open a shared project (.dfp)">
+                                    <span>📥</span> Retrieve / Import
+                                </button>
+                                <button type="button" class="btn-combo-footer-action" id="btnComboNewProject">
+                                    <span>➕</span> Add New Project
+                                </button>
+                                <button type="button" class="btn-combo-footer-action" id="btnComboManageAll">
+                                    <span>🗂️</span> Manage All Projects
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hidden native select for fallback/compatibility -->
+                    <select id="selectActiveProject" class="prj-select" style="display: none;" title="Switch active HVAC design project">
+                        <option value="">-- No Projects (Create One) --</option>
+                    </select>
+
+                    <button type="button" class="btn-prj-action btn-prj-new" id="btnAddNewProject" title="Create a new HVAC project">
+                        <span class="btn-icon">➕</span> Add New Project
+                    </button>
+                    <button type="button" class="btn-prj-action btn-prj-all" id="btnManageAllProjects" title="View all projects, edit details or delete projects">
+                        <span class="btn-icon">🗂️</span> All Projects
+                    </button>
+                </div>
+                <div class="prj-ribbon-right">
+                    <div class="prj-meta-snippet" id="prjMetaSnippet">
+                        <span class="prj-meta-tag" id="snippetPrjCode">No Project Selected</span>
+                        <span class="prj-meta-sep">•</span>
+                        <span class="prj-meta-client" id="snippetPrjClient">Click '+ Add New Project'</span>
+                    </div>
+                    <button type="button" class="btn-prj-action btn-prj-summary" id="btnProjectSummary" title="View Project Fitting Schedule & Cumulative Summary (ASHRAE Model)">
+                        <span class="btn-icon">📋</span> Project Summary
+                        <span class="prj-count-badge" id="badgeProjectFittingCount">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upper Calculation Section (Pale Cream #ffffea) -->
+            <div class="calc-section">
+                <!-- Fitting Header Title (Centered) -->
+                <div class="fitting-header">
+                    <div class="fitting-title" id="displayFittingTitle">CR11-1 Straight Duct, Rectangular</div>
+                    <div class="fitting-subtitle" id="displayFittingSubtitle">(Huebscher 1948)</div>
+                    <div class="fitting-citation" id="displayFittingCitation">ASHRAE Fundamentals, Ch. 21: Duct Design</div>
+                </div>
+
+                <!-- Air Condition & Thermodynamic Properties Panel (McQuay Parity - Auto Duct Sizer Only) -->
+                <div class="air-condition-panel hidden" id="airConditionPanel">
+                    <div class="air-condition-header-row">
+                        <div class="air-condition-select-wrap">
+                            <span class="icon-air-fan">🌀</span>
+                            <select id="selectAirCondition" class="air-condition-select" title="Select Air Temperature, Relative Humidity, and Barometric State">
+                                <option value="stp">20°C Air STP</option>
+                                <option value="cold_supply">13°C Air at 97% RH and 1 atm</option>
+                                <option value="comfort_return" selected>25°C Air at 50% RH and 1 atm</option>
+                                <option value="warm_heating">37°C Air at 23% RH and 1 atm</option>
+                                <option value="hot_supply">52°C Air at 11% RH and 1 atm</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="air-properties-grid">
+                        <div class="air-prop-col">
+                            <span class="prop-label">Fluid density</span>
+                            <span class="prop-val" id="valAirDensity">1.171 kg/m³</span>
+                        </div>
+                        <div class="air-prop-col">
+                            <span class="prop-label">Fluid viscosity</span>
+                            <span class="prop-val" id="valAirViscosity">0.0656 kg/m·h</span>
+                        </div>
+                        <div class="air-prop-col">
+                            <span class="prop-label">Specific Heat</span>
+                            <span class="prop-val" id="valAirCp">1.0048 kJ/kg·°C</span>
+                        </div>
+                        <div class="air-prop-col">
+                            <span class="prop-label">Energy factor</span>
+                            <span class="prop-val" id="valAirEnergyFactor">1.18 W/°C·L/s</span>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- ASHRAE Range / Limit Notification Banner (Full width across top) -->
+                <div id="ashrae-range-alert" class="ashrae-range-alert"></div>
+
+                <!-- Input and Output Grid (Exact Layout from Screenshot) -->
+                <div class="tables-container">
+                    <!-- Left: Input Table -->
+                    <div class="table-wrapper">
+                        <div class="table-title">Input</div>
+                        <table class="ashrae-table" id="inputTable">
+                            <tbody id="inputTableBody">
+                                <!-- Dynamically populated by JS according to selected fitting -->
+                            </tbody>
+                        </table>
+
+                        <!-- Calculate & Reset Buttons -->
+                        <div class="calc-actions-row">
+                            <button type="button" class="btn-calculate" id="btnCalculate">
+                                <span class="icon-calc-box"></span>
+                                Calculate
+                            </button>
+                            <button type="button" class="btn-download-calc-action" id="btnDownloadCalcAction" title="Download current calculation in PDF format">
+                                <span class="icon-pdf-box">📄</span> Download PDF
+                            </button>
+                            <button type="button" class="btn-add-to-project" id="btnAddToProject" title="Add this calculated fitting to active project schedule">
+                                <span class="icon-add-box">➕</span> Add to Project
+                            </button>
+                            <button type="button" class="btn-reset-sizer" id="btnResetSizer" title="Reset all inputs and outputs to size another duct">
+                                🔄 Reset / Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right: Output Table -->
+                    <div class="table-wrapper">
+                        <div class="table-title">Output</div>
+                        <table class="ashrae-table" id="outputTable">
+                            <tbody id="outputTableBody">
+                                <tr id="row-out-sized" class="hidden" style="background-color: #f0fdf4;">
+                                    <td class="col-label" id="lbl-out-sized" style="font-weight: bold; color: #15803d;">Sized Duct Section</td>
+                                    <td class="col-output" id="out-sized" style="font-weight: 800; font-size: 13px; color: #166534;">-</td>
+                                </tr>
+                                <tr id="row-out-v">
+                                    <td class="col-label" id="lbl-out-v">Velocity (V, m/s)</td>
+                                    <td class="col-output" id="out-v">-</td>
+                                </tr>
+                                <tr id="row-out-fr" class="row-loss-rate">
+                                    <td class="col-label" id="lbl-out-fr">Friction Rate (Pa/m)</td>
+                                    <td class="col-output" id="out-fr">-</td>
+                                </tr>
+                                <tr id="row-out-Pv">
+                                    <td class="col-label" id="lbl-out-Pv">Vel Pres at V (Pv, Pa)</td>
+                                    <td class="col-output" id="out-Pv">-</td>
+                                </tr>
+                                <tr id="row-out-f">
+                                    <td class="col-label" id="lbl-out-f">Friction Factor (f)</td>
+                                    <td class="col-output" id="out-f">-</td>
+                                </tr>
+                                <tr id="row-out-dp" class="row-highlight-loss">
+                                    <td class="col-label" id="lbl-out-dp">Pressure Loss (&Delta;P)</td>
+                                    <td class="col-output" id="out-dp">-</td>
+                                </tr>
+                                <tr id="row-out-De">
+                                    <td class="col-label" id="lbl-out-De">Equivalent Ø (De)</td>
+                                    <td class="col-output" id="out-De">-</td>
+                                </tr>
+                                <tr id="row-out-AR">
+                                    <td class="col-label">Aspect Ratio (W/H)</td>
+                                    <td class="col-output" id="out-AR">-</td>
+                                </tr>
+                                <tr id="row-out-area">
+                                    <td class="col-label" id="lbl-out-area">Flow Area</td>
+                                    <td class="col-output" id="out-area">-</td>
+                                </tr>
+                                <tr id="row-out-re">
+                                    <td class="col-label">Reynolds Number (Re)</td>
+                                    <td class="col-output" id="out-re">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Step-by-Step Calculation & Substituted Formula Breakdown (Fitting Loss Analysis & Auto Duct Sizer) -->
+                <div class="formulas-wrapper" id="formulasWrapper">
+                    <!-- Normal Window Header -->
+                    <div class="formulas-header" id="formulasToggleHeader">
+                        <div class="f-header-left">
+                            <span class="f-toggle-arrow" id="fToggleArrow">▶</span>
+                            <span class="f-header-title">📐 Step-by-Step Engineering Calculation Breakdown</span>
+                            <span class="calc-header-hint">Press <kbd>C</kbd> or <kbd>Shift+F</kbd> for Full Screen</span>
+                        </div>
+                        <div class="f-header-right">
+                            <button type="button" class="btn-calc-fullscreen" id="btnCalcFullscreen" title="View Step-by-Step Calculations in Full Screen (Shortcut: C or Shift+F)">
+                                <span class="fs-icon">⛶</span> Full Screen View
+                            </button>
+                            <div class="f-header-badge">Engineering Precision</div>
+                        </div>
+                    </div>
+
+                    <!-- Dedicated Fullscreen Top Bar (Displayed only in full screen) -->
+                    <div class="calc-fs-topbar hidden" id="calcFsTopBar">
+                        <div class="calc-fs-left">
+                            <span class="calc-fs-badge">📐 CALCULATION BREAKDOWN FULL SCREEN</span>
+                            <span class="calc-fs-title" id="calcFsTitleText">CR11-1 Straight Duct, Rectangular</span>
+                            <span class="calc-fs-citation" id="calcFsCitationText">(ASHRAE Fundamentals, Ch. 21)</span>
+                        </div>
+                        <div class="calc-fs-right">
+                            <span class="calc-fs-hint">Shortcuts: <kbd>+</kbd>/<kbd>-</kbd> Zoom, <kbd>0</kbd> Reset, <kbd>Esc</kbd> Exit</span>
+                            <button type="button" id="btnCalcFsZoomOut" class="calc-fs-btn" title="Zoom Out (-)">🔍-</button>
+                            <button type="button" id="btnCalcFsZoomReset" class="calc-fs-btn" title="Reset Zoom to 100% (0)">100%</button>
+                            <button type="button" id="btnCalcFsZoomIn" class="calc-fs-btn" title="Zoom In (+)">🔍+</button>
+                            <button type="button" id="btnCalcFsDownloadPdf" class="calc-fs-btn btn-pdf" title="Download Calculation PDF">📄 Download PDF</button>
+                            <button type="button" id="btnExitCalcFullscreen" class="calc-fs-btn calc-fs-btn-exit" title="Exit Full Screen (Esc or C)">✖ Exit Full Screen (Esc)</button>
+                        </div>
+                    </div>
+
+                    <div class="formulas-container hidden" id="formulasContainer" style="display: none;">
+                        <!-- Steps injected by app.js -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grooved Divider Bar -->
+            <div class="window-divider"></div>
+
+            <!-- Lower Section: Gray Drafting Background with White Engineering Sheet -->
+            <div class="drawing-workspace" id="drawingWorkspace">
+                <!-- CAD Workspace Toolbar (Controls & Fullscreen Entry) -->
+                <div class="cad-toolbar" id="cadToolbar">
+                    <div class="cad-toolbar-left">
+                        <span class="cad-tool-badge">📐 CAD DRAFTING</span>
+                        <span class="cad-toolbar-hint">Press <kbd>F</kbd> for Full Screen, <kbd>Esc</kbd> to exit</span>
+                    </div>
+                    <div class="cad-toolbar-right">
+                        <button type="button" id="btnToggleDiagramMode" class="cad-tool-btn" title="Toggle between Official Blueprint and Dynamic Vector CAD">
+                            <span class="tool-icon">📐</span> <span id="lblDiagramMode">Official Blueprint</span>
+                        </button>
+                        <button type="button" id="btnToggleCalcPanel" class="cad-tool-btn" title="Toggle calculation tables to maximize workspace">
+                            <span class="tool-icon">⇕</span> <span id="lblToggleCalc">Maximize in Window</span>
+                        </button>
+                        <button type="button" id="btnFullscreenView" class="cad-tool-btn cad-btn-primary" title="View CAD Technical Representation in Full Screen (F)">
+                            <span class="tool-icon">⛶</span> Full Screen View
+                        </button>
+                    </div>
+                </div>
+
+                <div class="cad-sheet" id="cadSheet">
+                    <!-- Dedicated Fullscreen Header Bar (Visible when in Full Screen) -->
+                    <div class="fullscreen-top-bar" id="fullscreenTopBar">
+                        <div class="fs-info-group">
+                            <span class="fs-badge">DuctFit Pro CAD FULLSCREEN</span>
+                            <span class="fs-fitting-name" id="fsFittingName">CR11-1 Straight Duct, Rectangular</span>
+                        </div>
+                        <div class="fs-controls-group">
+                            <button type="button" id="btnFsZoomOut" class="fs-tool-btn" title="Zoom Out (Ctrl -)">🔍−</button>
+                            <button type="button" id="btnFsZoomReset" class="fs-tool-btn" title="Reset Zoom to 100%">100%</button>
+                            <button type="button" id="btnFsZoomIn" class="fs-tool-btn" title="Zoom In (Ctrl +)">🔍+</button>
+                            <label class="fs-check-label" title="Toggle Dimension Values">
+                                <input type="checkbox" id="checkFsShowValues" checked>
+                                <span>Values</span>
+                            </label>
+                            <button type="button" id="btnFsPrint" class="fs-tool-btn" title="Print Technical Drawing Sheet">🖨️ Print</button>
+                            <button type="button" id="btnExitFullscreen" class="fs-tool-btn fs-btn-exit" title="Exit Full Screen (Esc)">✖ Exit Full Screen (Esc)</button>
+                        </div>
+                    </div>
+
+                    <!-- Sheet Header -->
+                    <div class="sheet-cad-header">
+                        <div class="sheet-header-title" id="sheetTitleText">CR11-1 Straight Duct, Rectangular</div>
+                        <div class="sheet-header-subtitle" id="sheetSubtitleText">(Huebscher 1948)</div>
+                        <div class="sheet-header-rule"></div>
+                    </div>
+
+                    <!-- CAD Technical Drawing Area (Official ASHRAE Diagram + Dynamic Vector Layer) -->
+                    <div class="svg-drawing-container" id="svgDrawingContainer">
+                        <div class="cad-drawing-viewport" id="cadDrawingViewport">
+                            <!-- Official High-Resolution ASHRAE Blueprint Image -->
+                            <img id="cadOfficialImg" class="cad-official-img" alt="Official ASHRAE Technical Diagram" src="/static/fittings_img/CR11-1.png">
+
+                            <!-- Dynamic Parametric SVG Layer (For Live Substituted Dimension Values) -->
+                            <svg id="cadSvg" class="cad-dynamic-svg hidden" viewBox="0 0 750 350" preserveAspectRatio="xMidYMid meet">
+                                <!-- Dynamic SVG content drawn by app.js -->
+                            </svg>
+
+                            <!-- Live Dimensions Badge Overlay -->
+                            <div class="live-dims-badge" id="liveDimsBadge">
+                                <span id="badgeContent">Q = 3000 L/s | 400 × 300 mm | V = 25.0 m/s | ΔP = 51.7 Pa</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fullscreen HUD Summary of Critical Sizing & Loss Parameters -->
+                    <div class="fs-hud-summary" id="fsHudSummary">
+                        <div class="fs-hud-item"><span class="fs-hud-lbl">Flow (Q):</span> <span class="fs-hud-val" id="fsHudQ">3000 L/s</span></div>
+                        <div class="fs-hud-item"><span class="fs-hud-lbl">Velocity (V):</span> <span class="fs-hud-val" id="fsHudV">25.0 m/s</span></div>
+                        <div class="fs-hud-item"><span class="fs-hud-lbl">Vel Pres (Pv):</span> <span class="fs-hud-val" id="fsHudPv">376 Pa</span></div>
+                        <div class="fs-hud-item"><span class="fs-hud-lbl">Friction (f):</span> <span class="fs-hud-val" id="fsHudF">0.0157</span></div>
+                        <div class="fs-hud-item fs-hud-highlight"><span class="fs-hud-lbl">Loss (ΔP):</span> <span class="fs-hud-val" id="fsHudDp">51.7 Pa</span></div>
+                    </div>
+
+                    <!-- Sheet Footer -->
+                    <div class="sheet-cad-footer">
+                        <div class="footer-left" id="footerDate">10-19-2026</div>
+                        <div class="footer-center">
+                            <label class="toggle-dim-mode">
+                                <input type="checkbox" id="checkShowValues" checked>
+                                <span>Display Values in Drawing</span>
+                            </label>
+                        </div>
+                        <div class="footer-right" id="footerVersion">DuctFit Pro Version 1.0.15 &bull; ASHRAE Fundamentals (Ch. 21)</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ASHRAE Duct Fitting Coding Details Modal Dialog -->
+    <div id="fittingCodeModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalCodeTitle" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">📘</span>
+                    <div>
+                        <h2 id="modalCodeTitle" class="modal-title">ASHRAE Duct Fitting Coding System</h2>
+                        <p class="modal-subtitle">ASHRAE Handbook—Fundamentals, Chapter 21 (Duct Design), Table 5 &amp; Section 3.2</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseCodeModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Interactive Live Code Decoder Tool -->
+                <div class="code-decoder-box">
+                    <div class="decoder-input-row">
+                        <label for="codeDecoderInput" class="decoder-label">Decode / Test Fitting Code:</label>
+                        <div class="decoder-input-wrap">
+                            <input type="text" id="codeDecoderInput" class="decoder-input" maxlength="12" spellcheck="false">
+                            <button type="button" id="btnDecodeCurrent" class="decoder-btn" title="Decode Currently Selected Fitting">Active Fitting</button>
+                        </div>
+                    </div>
+                    <div class="decoder-result-chips" id="decoderResultChips">
+                        <!-- Populated dynamically by app.js -->
+                    </div>
+                </div>
+
+                <!-- Official ASHRAE Handbook Table 5: Duct Fitting Codes -->
+                <div class="ashrae-textbook-card">
+                    <div class="ashrae-table5-title">Table 5 &nbsp; Duct Fitting Codes</div>
+                    <div class="ashrae-table5-wrap">
+                        <table class="ashrae-table5">
+                            <thead>
+                                <tr>
+                                    <th class="th-fn">Fitting<br>Function</th>
+                                    <th class="th-geo">Geometry</th>
+                                    <th class="th-cat">Category</th>
+                                    <th class="th-seq">Sequential<br>Number</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="td-fn"><span class="code-item" data-decode="S"><strong>S</strong>: Supply</span></td>
+                                    <td class="td-geo"><span class="code-item" data-decode="D"><strong>D</strong>: round (<strong>D</strong>iameter)</span></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="1">1. Entries</span></td>
+                                    <td class="td-seq">1,2,3...<em>n</em></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="2">2. Exits</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"><span class="code-item" data-decode="E"><strong>E</strong>: Exhaust/Return</span></td>
+                                    <td class="td-geo"><span class="code-item" data-decode="R"><strong>R</strong>: <strong>R</strong>ectangular</span></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="3">3. Elbows</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="4">4. Transitions</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"><span class="code-item" data-decode="C"><strong>C</strong>: Common</span></td>
+                                    <td class="td-geo"><span class="code-item" data-decode="F"><strong>F</strong>: <strong>F</strong>lat oval</span></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="5">5. Junctions</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn td-fn-sub">&nbsp;&nbsp;&nbsp;&nbsp;(supply and return)</td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="6">6. Obstructions</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="7">7. Fan and system interactions</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="8">8. Duct-mounted equipment</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="9">9. Dampers</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="10">10. Hoods</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                                <tr>
+                                    <td class="td-fn"></td>
+                                    <td class="td-geo"></td>
+                                    <td class="td-cat"><span class="code-item" data-decode="11">11. Straight duct</span></td>
+                                    <td class="td-seq"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="code-guide-grid">
+
+                    <!-- Card 4: Interactive Examples -->
+                    <div class="guide-card full-span examples-card">
+                        <div class="guide-card-header ex-header">
+                            <span class="guide-card-badge">Examples</span>
+                            <h3>Click Any Example to Test Breakdown</h3>
+                        </div>
+                        <div class="examples-grid">
+                            <div class="ex-tile" data-code="CR3-1">
+                                <span class="ex-code">CR3-1</span>
+                                <div class="ex-desc">
+                                    <strong>Common &bull; Rectangular &bull; Elbow #1</strong>
+                                    <span>Smooth radius 90° rectangular elbow (r/W = 1.5), without turning vanes.</span>
+                                </div>
+                            </div>
+                            <div class="ex-tile" data-code="CD11-1">
+                                <span class="ex-code">CD11-1</span>
+                                <div class="ex-desc">
+                                    <strong>Common &bull; Round (Ø) &bull; Straight Duct #1</strong>
+                                    <span>Standard straight round duct with Darcy-Weisbach &amp; Colebrook friction factor calculation (Eq. 18 &amp; 19).</span>
+                                </div>
+                            </div>
+                            <div class="ex-tile" data-code="ED5-1">
+                                <span class="ex-code">ED5-1</span>
+                                <div class="ex-desc">
+                                    <strong>Exhaust &bull; Round (Ø) &bull; Junction #1</strong>
+                                    <span>Converging round tee with 90° branch tap in exhaust/return air system.</span>
+                                </div>
+                            </div>
+                            <div class="ex-tile" data-code="SR4-1">
+                                <span class="ex-code">SR4-1</span>
+                                <div class="ex-desc">
+                                    <strong>Supply &bull; Rectangular &bull; Transition #1</strong>
+                                    <span>Concentric rectangular contraction or expansion fitting in supply air ductwork.</span>
+                                </div>
+                            </div>
+                            <div class="ex-tile" data-code="CD9-1">
+                                <span class="ex-code">CD9-1</span>
+                                <div class="ex-desc">
+                                    <strong>Common &bull; Round (Ø) &bull; Damper #1</strong>
+                                    <span>Round butterfly volume control damper with variable blade deflection angle.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">Reference: ANSI / ASHRAE Fundamentals, Chapter 21 (Duct Design), Table 5</div>
+                <button type="button" id="btnCloseCodeModalBottom" class="modal-footer-close-btn">Close Reference</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ASHRAE Absolute Roughness Material Picker Modal (Authentic ASHRAE Database) -->
+    <div class="roughness-modal-backdrop" id="roughnessModalBackdrop">
+        <div class="roughness-modal-window" id="roughnessModalWindow">
+            <div class="roughness-modal-titlebar">
+                <div class="roughness-title-left">
+                    <span class="roughness-win-icon">📄</span>
+                    <span class="roughness-title-text" id="roughnessModalTitle">Absolute Roughness (mm)</span>
+                </div>
+                <button type="button" class="roughness-close-btn" id="btnCloseRoughnessModal" title="Close">✕</button>
+            </div>
+            <div class="roughness-modal-body">
+                <div class="roughness-list-container" id="roughnessListContainer" tabindex="0">
+                    <!-- Populated dynamically with all 12 ASHRAE materials from official database -->
+                </div>
+            </div>
+            <div class="roughness-modal-footer">
+                <div class="roughness-footer-ref">ANSI / ASHRAE Fundamentals, Ch. 21 Table 1</div>
+                <div class="roughness-footer-btns">
+                    <button type="button" class="roughness-btn-action roughness-btn-select" id="btnSelectRoughness">Select</button>
+                    <button type="button" class="roughness-btn-action roughness-btn-cancel" id="btnCancelRoughness">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- All Projects Management Modal (View, Search, Edit & Delete) -->
+    <div id="allProjectsModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalAllProjectsTitle" aria-modal="true">
+        <div class="modal-card modal-card-xl">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">🗂️</span>
+                    <div>
+                        <h2 id="modalAllProjectsTitle" class="modal-title">All HVAC Design Projects</h2>
+                        <p class="modal-subtitle">View, search, switch active project, edit metadata, or delete projects</p>
+                    </div>
+                </div>
+                <div class="modal-header-actions" style="display: flex; align-items: center; gap: 10px;">
+                    <button type="button" class="btn-prj-action btn-prj-import" id="btnAllProjectsImport" title="Retrieve an archived project or open a shared project (.dfp)">
+                        <span class="btn-icon">📥</span> Retrieve / Import Project
+                    </button>
+                    <input type="file" id="fileInputProjectArchive" accept=".dfp,.ductfit,.json" style="display: none;">
+                    <button type="button" class="btn-prj-action btn-prj-new" id="btnAllProjectsCreateNew" title="Create a new HVAC project">
+                        <span class="btn-icon">➕</span> Add New Project
+                    </button>
+                    <button type="button" id="btnCloseAllProjectsModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+                </div>
+            </div>
+
+            <div class="modal-body all-projects-modal-body">
+                <!-- Search & Filter Controls -->
+                <div class="all-projects-filter-bar">
+                    <div class="all-projects-search-wrap">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="inputFilterAllProjects" class="prj-input all-projects-search-input" placeholder="Search by Project Code, Name, Client, Contractor..." autocomplete="off">
+                        <button type="button" id="btnClearFilterAllProjects" class="btn-clear-search hidden" title="Clear filter">&times;</button>
+                    </div>
+                    <div class="all-projects-stats-pill" id="allProjectsStatsPill">
+                        Total: <strong id="allProjectsCount">0</strong> Projects
+                    </div>
+                </div>
+
+                <!-- Projects Table Container -->
+                <div class="prj-table-container">
+                    <table class="prj-schedule-table all-projects-table" id="tableAllProjects">
+                        <thead>
+                            <tr>
+                                <th style="width: 36px;" class="text-center">#</th>
+                                <th style="width: 90px;" class="text-center">Status</th>
+                                <th style="width: 120px;">Project Code</th>
+                                <th>Project Name</th>
+                                <th style="width: 120px;">Client</th>
+                                <th style="width: 120px;">Contractor</th>
+                                <th style="width: 85px;" class="text-center">Sized Runs</th>
+                                <th style="width: 85px;" class="text-center">Fittings</th>
+                                <th style="width: 130px;">Last Modified</th>
+                                <th style="width: 170px;" class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyAllProjects">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">HVAC Duct Project Registry &bull; DuctFit Pro</div>
+                <div>
+                    <button type="button" id="btnCloseAllProjectsBottom" class="modal-btn modal-btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Project Modal Dialog -->
+    <div id="editProjectModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalEditProjectTitle" aria-modal="true">
+        <div class="modal-card modal-card-md">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">✏️</span>
+                    <div>
+                        <h2 id="modalEditProjectTitle" class="modal-title">Edit Project Details</h2>
+                        <p class="modal-subtitle" id="editProjectHeaderSubtitle">Update project code, name, client, and contractor metadata</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseEditProjectModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body prj-modal-body">
+                <form id="formEditProject" onsubmit="return false;">
+                    <input type="hidden" id="editPrjId">
+                    <div class="prj-form-grid">
+                        <div class="prj-form-group">
+                            <label for="inputEditPrjCode" class="prj-label">Project Code <span class="req">*</span></label>
+                            <input type="text" id="inputEditPrjCode" class="prj-input" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputEditPrjName" class="prj-label">Project Name <span class="req">*</span></label>
+                            <input type="text" id="inputEditPrjName" class="prj-input" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputEditPrjClient" class="prj-label">Client</label>
+                            <input type="text" id="inputEditPrjClient" class="prj-input">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputEditPrjContractor" class="prj-label">Contractor</label>
+                            <input type="text" id="inputEditPrjContractor" class="prj-input">
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputEditPrjSubcontractor" class="prj-label">Sub Contractor</label>
+                            <input type="text" id="inputEditPrjSubcontractor" class="prj-input">
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputEditPrjNotes" class="prj-label">System Description / Notes</label>
+                            <textarea id="inputEditPrjNotes" class="prj-textarea" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">Project Database &bull; DuctFit Pro</div>
+                <div class="prj-modal-actions">
+                    <button type="button" id="btnCancelEditProject" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="btnSaveEditProject" class="modal-btn modal-btn-primary">💾 Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Project Modal Dialog -->
+    <div id="newProjectModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalNewProjectTitle" aria-modal="true">
+        <div class="modal-card modal-card-md">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">📁</span>
+                    <div>
+                        <h2 id="modalNewProjectTitle" class="modal-title">Create New HVAC Duct Project</h2>
+                        <p class="modal-subtitle">Configure Project Specifications &amp; Fitting Schedule Target</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseNewProjectModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body prj-modal-body">
+                <form id="formNewProject" onsubmit="return false;">
+                    <div class="prj-form-grid">
+                        <div class="prj-form-group">
+                            <label for="inputPrjCode" class="prj-label">Project Code <span class="req">*</span></label>
+                            <input type="text" id="inputPrjCode" class="prj-input" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputPrjName" class="prj-label">Project Name <span class="req">*</span></label>
+                            <input type="text" id="inputPrjName" class="prj-input" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputPrjClient" class="prj-label">Client</label>
+                            <input type="text" id="inputPrjClient" class="prj-input">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputPrjContractor" class="prj-label">Contractor</label>
+                            <input type="text" id="inputPrjContractor" class="prj-input">
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputPrjSubcontractor" class="prj-label">Sub Contractor</label>
+                            <input type="text" id="inputPrjSubcontractor" class="prj-input">
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputPrjNotes" class="prj-label">System Description / Notes</label>
+                            <textarea id="inputPrjNotes" class="prj-textarea" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">Standard: ASHRAE Fundamentals, Ch. 21</div>
+                <div class="prj-modal-actions">
+                    <button type="button" id="btnCancelNewProject" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="btnSaveNewProject" class="modal-btn modal-btn-primary">💾 Save &amp; Select Project</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Archive Import & Conflict Resolution Modal -->
+    <div id="modalImportArchive" class="modal-overlay hidden" role="dialog" aria-labelledby="modalImportArchiveTitle" aria-modal="true">
+        <div class="modal-card modal-card-md">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">📥</span>
+                    <div>
+                        <h2 id="modalImportArchiveTitle" class="modal-title">Retrieve / Import Project</h2>
+                        <p class="modal-subtitle">Review project specifications &amp; choose retrieval action</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseImportArchiveModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body prj-modal-body">
+                <div id="importConflictNotice" class="import-conflict-banner hidden">
+                    <span class="conflict-icon">⚠️</span>
+                    <div>
+                        <strong>Existing Project Detected:</strong>
+                        <span>A project with code <strong id="conflictProjectCode"></strong> already exists in your workspace. Choose how you want to handle this below.</span>
+                    </div>
+                </div>
+
+                <div class="import-preview-card">
+                    <div class="import-preview-header">
+                        <span class="import-preview-badge" id="importPreviewUnit">SI</span>
+                        <h3 class="import-preview-title" id="importPreviewTitle">Project Name</h3>
+                        <span class="import-preview-code" id="importPreviewCode">PRJ-001</span>
+                    </div>
+                    <div class="import-preview-grid">
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Client:</span>
+                            <span class="import-preview-value" id="importPreviewClient">-</span>
+                        </div>
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Contractor:</span>
+                            <span class="import-preview-value" id="importPreviewContractor">-</span>
+                        </div>
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Total Fittings:</span>
+                            <span class="import-preview-value" id="importPreviewFittings">0</span>
+                        </div>
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Sized Runs:</span>
+                            <span class="import-preview-value" id="importPreviewSizerRuns">0</span>
+                        </div>
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Calculated Loss:</span>
+                            <span class="import-preview-value" id="importPreviewDp">0.0 Pa</span>
+                        </div>
+                        <div class="import-preview-field">
+                            <span class="import-preview-label">Safety Margin:</span>
+                            <span class="import-preview-value" id="importPreviewMargin">+0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="import-mode-selection hidden" id="importModeSelectionGroup">
+                    <div class="import-mode-title">Conflict Resolution Mode:</div>
+                    <label class="import-radio-label active" id="lblImportModeCopy">
+                        <input type="radio" name="importConflictMode" value="copy" checked>
+                        <div class="import-radio-content">
+                            <strong>Import as New Copy (Safe &amp; Recommended)</strong>
+                            <span>Creates a fresh project copy with an updated unique code without overwriting existing work.</span>
+                        </div>
+                    </label>
+                    <label class="import-radio-label" id="lblImportModeOverwrite">
+                        <input type="radio" name="importConflictMode" value="overwrite">
+                        <div class="import-radio-content">
+                            <strong>Overwrite Existing Project</strong>
+                            <span>Replaces your local project with the latest version from this archive file.</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">Project Security &bull; Offline Interoperability</div>
+                <div class="prj-modal-actions">
+                    <button type="button" id="btnCancelImportArchive" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="btnConfirmImportArchive" class="modal-btn modal-btn-primary">📥 Retrieve &amp; Open Project</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Summary & Fitting Schedule Modal (Authentic ASHRAE Fitting Database Model) -->
+    <div id="projectSummaryModal" class="modal-overlay hidden" role="dialog" aria-labelledby="modalPrjSummaryTitle" aria-modal="true">
+        <div class="modal-card modal-card-xl">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">📊</span>
+                    <div>
+                        <h2 id="modalPrjSummaryTitle" class="modal-title">Project Summary Schedule</h2>
+                        <p class="modal-subtitle" id="summaryProjectHeaderSubtitle">DuctFit Pro &bull; ASHRAE Fundamentals, Ch. 21</p>
+                    </div>
+                </div>
+                <div class="summary-tab-group" id="summaryTabGroup">
+                    <button type="button" class="summary-tab-btn" id="tabSummarySizer" title="View sized duct run segments schedule">
+                        Auto Duct Sizer Schedule
+                    </button>
+                    <button type="button" class="summary-tab-btn active" id="tabSummaryFittings" title="View duct fittings schedule for ESP calculation">
+                        Fitting Loss Analysis (ESP)
+                    </button>
+                </div>
+                <button type="button" id="btnClosePrjSummaryModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body prj-summary-body">
+                <!-- Project Information Sheet Banner (Official Engineering Submittal Header) -->
+                <div class="prj-spec-card">
+                    <div class="prj-spec-grid">
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Project Code:</span>
+                            <span class="prj-spec-value" id="summaryValCode">-</span>
+                        </div>
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Project Name:</span>
+                            <span class="prj-spec-value" id="summaryValName">-</span>
+                        </div>
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Client:</span>
+                            <span class="prj-spec-value" id="summaryValClient">-</span>
+                        </div>
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Contractor:</span>
+                            <span class="prj-spec-value" id="summaryValContractor">-</span>
+                        </div>
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Sub Contractor:</span>
+                            <span class="prj-spec-value" id="summaryValSubcontractor">-</span>
+                        </div>
+                        <div class="prj-spec-item">
+                            <span class="prj-spec-label">Design Standard:</span>
+                            <span class="prj-spec-value">ANSI / ASHRAE Fundamentals (Ch. 21)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Engineering Design Basis & Governing Criteria Sheet -->
+                <div class="prj-basis-card">
+                    <div class="prj-basis-col">
+                        <span class="prj-basis-icon">📐</span>
+                        <div>
+                            <div class="prj-basis-title">Design Formulation & Standard</div>
+                            <div class="prj-basis-desc">ANSI / ASHRAE Fundamentals Ch. 21 (Duct Design)</div>
+                        </div>
+                    </div>
+                    <div class="prj-basis-col">
+                        <span class="prj-basis-icon">💨</span>
+                        <div>
+                            <div class="prj-basis-title">Aerodynamic Fluid Properties</div>
+                            <div class="prj-basis-desc" id="summaryFluidBasis">Standard Dry Air (ρ = 1.204 kg/m³, μ = 1.817×10⁻⁵ Pa·s)</div>
+                        </div>
+                    </div>
+                    <div class="prj-basis-col">
+                        <span class="prj-basis-icon">🔬</span>
+                        <div>
+                            <div class="prj-basis-title">Loss Calculation Methodology</div>
+                            <div class="prj-basis-desc" id="summaryMethodBasis">Darcy-Colebrook &amp; Multilinear Table Interpolation</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Engineering Design Safety Margin Sheet Card -->
+                <div class="prj-margin-card" id="prjMarginCard">
+                    <div class="prj-margin-left">
+                        <span class="prj-margin-icon">🛡️</span>
+                        <div class="prj-margin-text">
+                            <div class="prj-margin-title">Design Safety Margin (Fan Static Pressure Rating)</div>
+                            <div class="prj-margin-desc">Safety factor added to calculated subtotal loss for fan selection, field leakage &amp; duct uncertainties</div>
+                        </div>
+                    </div>
+                    <div class="prj-margin-right">
+                        <div class="margin-chip-group" id="marginPresetChips">
+                            <button type="button" class="btn-margin-chip" data-margin="0">0%</button>
+                            <button type="button" class="btn-margin-chip" data-margin="5">5%</button>
+                            <button type="button" class="btn-margin-chip active" data-margin="10">10%</button>
+                            <button type="button" class="btn-margin-chip" data-margin="15">15%</button>
+                            <button type="button" class="btn-margin-chip" data-margin="20">20%</button>
+                            <button type="button" class="btn-margin-chip" data-margin="25">25%</button>
+                        </div>
+                        <div class="margin-input-wrap">
+                            <label for="inputProjectDesignMargin" class="margin-input-label">Margin:</label>
+                            <input type="number" id="inputProjectDesignMargin" class="input-margin-box" min="0" max="100" step="0.5" value="10" placeholder="10">
+                            <span class="margin-unit-suffix">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW 1: Fitting Loss Schedule (ESP Calculation) -->
+                <div id="viewSummaryFittings" class="summary-schedule-view">
+                    <!-- KPI Metric Tiles -->
+                    <div class="prj-kpi-bar">
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiTotalFittings">0</span>
+                            <span class="kpi-label">Fittings in Schedule</span>
+                        </div>
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiSubtotalDp">0.0 Pa</span>
+                            <span class="kpi-label">Subtotal Loss (∑ΔP<sub>calc</sub>)</span>
+                        </div>
+                        <div class="prj-kpi-card highlight">
+                            <span class="kpi-num" id="kpiTotalDp">0.0 Pa</span>
+                            <span class="kpi-label" id="kpiTotalDpLabel">Total Design Loss / Fan ESP</span>
+                            <span class="kpi-sub-badge" id="kpiTotalDpSub">incl. +10% Margin</span>
+                        </div>
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiMaxLoss">0.0 Pa</span>
+                            <span class="kpi-label">Highest Section Loss</span>
+                        </div>
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiTotalAirflow">-</span>
+                            <span class="kpi-label" title="Highest airflow rate across all fittings in the schedule">Highest Flow Rate</span>
+                        </div>
+                    </div>
+
+                    <!-- Fitting Schedule Actions Toolbar -->
+                    <div class="schedule-actions-bar">
+                        <div class="schedule-actions-bar-left">
+                            <span class="schedule-bar-title">Fitting &amp; Equipment Loss Schedule</span>
+                            <span class="schedule-bar-hint">ASHRAE fittings + Manufacturer-certified equipment</span>
+                        </div>
+                        <div class="schedule-actions-bar-right">
+                            <button type="button" class="btn-schedule-action" id="btnAddCustomFitting" title="Add custom / manufacturer equipment (VAV box, inline fan, attenuator, etc.) to the schedule">
+                                <span class="btn-icon">➕</span> Add Custom Fitting
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Fitting Schedule Table -->
+                    <div class="prj-table-container">
+                        <table class="prj-schedule-table" id="tableProjectSchedule">
+                            <thead>
+                                <tr>
+                                    <th style="width: 36px;">#</th>
+                                    <th style="width: 100px;">Tag / Mark</th>
+                                    <th style="width: 80px;">Code</th>
+                                    <th>Fitting Description</th>
+                                    <th style="width: 65px;">Shape</th>
+                                    <th style="width: 145px;">Dimensions</th>
+                                    <th style="width: 85px;" class="text-right">Flow (Q)</th>
+                                    <th style="width: 85px;" class="text-right">Velocity (V)</th>
+                                    <th style="width: 75px;" class="text-right">P<sub>v</sub> (Pa)</th>
+                                    <th style="width: 75px;" class="text-right">Co / f</th>
+                                    <th style="width: 80px;" class="text-right">ΔP (ea)</th>
+                                    <th style="width: 75px;" class="text-center">Qty</th>
+                                    <th style="width: 90px;" class="text-right">Total ΔP</th>
+                                    <th style="width: 75px;" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyProjectSchedule">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                            <tfoot id="tfootProjectSchedule">
+                                <!-- Summary Row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- VIEW 2: Auto Duct Sizer Schedule (Duct Sizing Analysis) -->
+                <div id="viewSummarySizer" class="summary-schedule-view hidden">
+                    <!-- Sizer KPI Metric Tiles (Safety Margin Not Required for Auto Duct Sizer) -->
+                    <div class="prj-kpi-bar kpi-4-cols">
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiSizerRuns">0</span>
+                            <span class="kpi-label">Sized Duct Runs</span>
+                        </div>
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiSizerLength">0.0 m</span>
+                            <span class="kpi-label">Total Duct Length</span>
+                        </div>
+                        <div class="prj-kpi-card highlight">
+                            <span class="kpi-num" id="kpiSizerTotalDp">0.0 Pa</span>
+                            <span class="kpi-label" id="kpiSizerTotalDpLabel">Total Friction Loss (∑ΔP)</span>
+                        </div>
+                        <div class="prj-kpi-card">
+                            <span class="kpi-num" id="kpiSizerAvgRate">0.80 Pa/m</span>
+                            <span class="kpi-label">Average Friction Rate</span>
+                        </div>
+                    </div>
+
+                    <!-- Sizer Schedule Table -->
+                    <div class="prj-table-container">
+                        <table class="prj-schedule-table" id="tableSizerSchedule">
+                            <thead>
+                                <tr>
+                                    <th style="width: 36px;">#</th>
+                                    <th style="width: 95px;">Tag / Mark</th>
+                                    <th>Duct Section / Description</th>
+                                    <th style="width: 65px;">Shape</th>
+                                    <th style="width: 140px;">Sized Dimensions</th>
+                                    <th style="width: 80px;" class="text-right">Flow (Q)</th>
+                                    <th style="width: 80px;" class="text-right">Velocity (V)</th>
+                                    <th style="width: 75px;" class="text-right">Eq. Ø (De)</th>
+                                    <th style="width: 65px;" class="text-right">AR (W/H)</th>
+                                    <th style="width: 85px;" class="text-right">Friction Rate (&Delta;P<sub>f</sub>/L)</th>
+                                    <th style="width: 75px;" class="text-right">Length (L)</th>
+                                    <th style="width: 85px;" class="text-right">Loss (ΔP)</th>
+                                    <th style="width: 65px;" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodySizerSchedule">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                            <tfoot id="tfootSizerSchedule">
+                                <!-- Sizer Summary Row -->
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer prj-summary-footer">
+                <div class="prj-summary-footer-left">
+                    <button type="button" class="btn-prj-footer btn-primary-report" id="btnDownloadFitductPdf" title="Download official DuctFit Pro PDF Report">
+                        📄 Download Report (PDF)
+                    </button>
+                    <label class="prj-report-opt" for="chkIncludeCalculations" title="Check to include step-by-step engineering calculation breakdown in the PDF report; uncheck to exclude it">
+                        <input type="checkbox" id="chkIncludeCalculations" checked>
+                        <span>Include Calculations</span>
+                    </label>
+                    <button type="button" class="btn-prj-footer" id="btnAddCustomFittingFooter" title="Add custom / manufacturer equipment (VAV box, inline fan, attenuator, etc.)">
+                        ➕ Add Custom Fitting
+                    </button>
+                    <button type="button" class="btn-prj-footer btn-archive-share" id="btnArchiveActiveProjectSummary" title="Archive / Share this project for safety backup or collaboration (.dfp file)">
+                        📦 Archive / Share Project
+                    </button>
+                    <button type="button" class="btn-prj-footer" id="btnExportProjectCsv" title="Export schedule to CSV / Excel spreadsheet">
+                        📥 Export to CSV / Excel
+                    </button>
+                    <button type="button" class="btn-prj-footer" id="btnPrintProjectReport" title="Print or Save PDF Engineering Schedule">
+                        🖨️ Print / Save PDF
+                    </button>
+                    <button type="button" class="btn-prj-footer btn-danger-soft" id="btnClearProjectFittings" title="Clear items from active schedule">
+                        🗑️ Clear Schedule
+                    </button>
+                </div>
+                <div class="prj-summary-footer-right">
+                    <button type="button" class="modal-btn modal-btn-secondary" id="btnClosePrjSummaryBottom">Close Schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Context Menu for Project Schedule Table (Right Click on Any Fitting) -->
+    <div id="scheduleContextMenu" class="schedule-context-menu hidden">
+        <div class="context-menu-header">
+            <span class="context-menu-item-tag" id="ctxMenuTag">FITTING</span>
+            <span class="context-menu-item-code" id="ctxMenuCode"></span>
+        </div>
+        <div class="context-menu-divider"></div>
+        <button type="button" class="context-menu-item" id="ctxMenuDuplicate">
+            <span class="ctx-icon">📋</span>
+            <div class="ctx-text-wrap">
+                <span class="ctx-label">Duplicate Fitting</span>
+                <span class="ctx-sub">Add exact duplicate to end of schedule</span>
+            </div>
+        </button>
+        <button type="button" class="context-menu-item" id="ctxMenuChangeQty">
+            <span class="ctx-icon">🔢</span>
+            <div class="ctx-text-wrap">
+                <span class="ctx-label">Change Quantity</span>
+                <span class="ctx-sub">Edit fitting quantity directly</span>
+            </div>
+        </button>
+        <button type="button" class="context-menu-item" id="ctxMenuEdit">
+            <span class="ctx-icon">✏️</span>
+            <div class="ctx-text-wrap">
+                <span class="ctx-label">Edit Fitting</span>
+                <span class="ctx-sub">Modify dimensions or calculation</span>
+            </div>
+        </button>
+        <div class="context-menu-divider"></div>
+        <button type="button" class="context-menu-item context-menu-item-danger" id="ctxMenuDelete">
+            <span class="ctx-icon">🗑️</span>
+            <div class="ctx-text-wrap">
+                <span class="ctx-label">Delete Fitting</span>
+                <span class="ctx-sub">Remove from project schedule</span>
+            </div>
+        </button>
+    </div>
+
+    <!-- Quick Add Fitting / Duct Section Dialog -->
+    <div id="addFittingDialog" class="modal-overlay hidden" role="dialog" aria-labelledby="addFittingDialogTitle" aria-modal="true">
+        <div class="modal-card modal-card-sm">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">➕</span>
+                    <div>
+                        <h3 id="addFittingDialogTitle" class="modal-title">Add to Project Schedule</h3>
+                        <p class="modal-subtitle" id="addFittingProjectTarget">Project: Loading...</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseAddFittingDialog" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="add-fitting-preview-box">
+                    <div class="preview-fitting-name" id="previewFittingName">Fitting: -</div>
+                    <div class="preview-fitting-stats" id="previewFittingStats">Loss: - | Flow: - | Co: -</div>
+                </div>
+                <div class="prj-form-grid" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+                    <!-- Flow Path Selector for Junctions (Tees/Wyes) -->
+                    <div class="prj-form-group prj-col-span-2 hidden" id="groupFittingPath">
+                        <label class="prj-label" style="font-weight: 700; color: #0f172a; margin-bottom: 6px;">Flow Calculation Path <span class="req">*</span></label>
+                        <div style="display: flex; gap: 16px; padding: 8px 12px; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 6px;">
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: #0f172a;">
+                                <input type="radio" name="fittingFlowPath" id="radPathMain" value="main" checked>
+                                <span id="lblPathMain">Main Run (Straight-Through)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: #475569;">
+                                <input type="radio" name="fittingFlowPath" id="radPathBranch" value="branch">
+                                <span id="lblPathBranch">Branch Run (Takeoff)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="prj-form-group">
+                        <label for="inputFittingTag" class="prj-label">Item Mark / Tag <span class="req">*</span></label>
+                        <input type="text" id="inputFittingTag" class="prj-input">
+                    </div>
+                    <div class="prj-form-group" id="groupFittingQty">
+                        <label for="inputFittingQty" class="prj-label">Quantity <span class="req">*</span></label>
+                        <input type="number" id="inputFittingQty" class="prj-input" value="1" min="1" max="999">
+                    </div>
+                    <div class="prj-form-group hidden" id="groupSizerLength">
+                        <label for="inputSizerLength" class="prj-label" id="lblSizerLength">Run Length (m) <span class="req">*</span></label>
+                        <input type="number" id="inputSizerLength" class="prj-input" value="1.0" step="0.1" min="0.1">
+                    </div>
+                    <div class="prj-form-group prj-col-span-2">
+                        <label for="inputFittingNotes" class="prj-label" id="lblFittingNotes">Installation Notes / Location (Optional)</label>
+                        <input type="text" id="inputFittingNotes" class="prj-input">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelAddFitting" class="modal-btn modal-btn-secondary">Cancel</button>
+                <button type="button" id="btnConfirmAddFitting" class="modal-btn modal-btn-primary">➕ Confirm Add to Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add / Edit Custom / Manufacturer Fitting Modal -->
+    <div id="modalCustomFitting" class="modal-overlay hidden" role="dialog" aria-labelledby="modalCustomFittingTitle" aria-modal="true">
+        <div class="modal-card modal-card-md">
+            <div class="modal-header">
+                <div class="modal-title-wrap">
+                    <span class="modal-icon">⚙️</span>
+                    <div>
+                        <h2 id="modalCustomFittingTitle" class="modal-title">Add Custom / Manufacturer Fitting</h2>
+                        <p class="modal-subtitle" id="modalCustomFittingSubtitle">Specify equipment pressure loss from manufacturer catalog data</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseCustomFittingModal" class="modal-close-btn" title="Close (Esc)">&times;</button>
+            </div>
+
+            <div class="modal-body prj-modal-body">
+                <!-- Template Preset Dropdown Bar -->
+                <div class="custom-template-bar">
+                    <div class="template-select-wrap">
+                        <label for="selectCustomTemplate" class="template-label">Preset / Template:</label>
+                        <select id="selectCustomTemplate" class="template-select">
+                            <option value="">-- Blank Custom Fitting --</option>
+                            <optgroup label="Air Terminals">
+                                <option value="tpl_diff_4way">4-Way Diffuser (20 Pa)</option>
+                                <option value="tpl_slot_diff">Linear Slot Diffuser (25 Pa)</option>
+                                <option value="tpl_swirl_diff">Swirl Diffuser (30 Pa)</option>
+                                <option value="tpl_jet_diff">Jet Nozzle Diffuser (40 Pa)</option>
+                                <option value="tpl_grille">Grille (15 Pa)</option>
+                                <option value="tpl_grille_dd">Double Deflection Grille (18 Pa)</option>
+                                <option value="tpl_grille_bar">Linear Bar Grille (20 Pa)</option>
+                                <option value="tpl_grille_egg">Eggcrate Grille (15 Pa)</option>
+                                <option value="tpl_register">Register with OBD (20 Pa)</option>
+                            </optgroup>
+                            <optgroup label="Airflow Control Units (VAV &amp; CAV)">
+                                <option value="tpl_vav">VAV Terminal Unit (100 Pa)</option>
+                                <option value="tpl_cav">CAV Mechanical Volume Controller (80 Pa)</option>
+                            </optgroup>
+                            <optgroup label="Louvers &amp; Weather Protection">
+                                <option value="tpl_sand_trap">Sand Trap Louver - Desert Grade (65 Pa)</option>
+                                <option value="tpl_weather_louver">Weather Defense Louver (40 Pa)</option>
+                                <option value="tpl_acoustic_louver">Acoustic Weather Louver (55 Pa)</option>
+                            </optgroup>
+                            <optgroup label="Dampers &amp; Safety Devices">
+                                <option value="tpl_blast_damper">Heavy Duty Blast Protection Damper (90 Pa)</option>
+                                <option value="tpl_gastight_damper">Gas-Tight Damper (40 Pa)</option>
+                                <option value="tpl_damper">Motorized Fire &amp; Smoke Damper (25 Pa)</option>
+                                <option value="tpl_backdraft">Gravity Non-Return / Backdraft Damper (35 Pa)</option>
+                            </optgroup>
+                            <optgroup label="Duct Heating">
+                                <option value="tpl_duct_heater">Electric In-Duct Heating Coil (35 Pa)</option>
+                            </optgroup>
+                            <optgroup label="Air Filtration &amp; Silencers">
+                                <option value="tpl_filter">HEPA Filter Housing Unit (180 Pa)</option>
+                                <option value="tpl_bag_filter">Secondary Bag / Pocket Filter Bank (95 Pa)</option>
+                                <option value="tpl_attenuator">Sound Attenuator / Silencer (50 Pa)</option>
+                                <option value="tpl_fan">Inline Mixed-Flow Duct Fan (150 Pa)</option>
+                            </optgroup>
+                            <optgroup label="User Saved Templates" id="optgroupUserSavedTemplates">
+                            </optgroup>
+                        </select>
+                    </div>
+                    <button type="button" id="btnApplyCustomTemplate" class="btn-apply-template">Load Preset</button>
+                </div>
+
+                <form id="formCustomFitting" onsubmit="return false;">
+                    <div id="customFittingError" class="custom-error-banner hidden"></div>
+                    <div class="prj-form-grid">
+                        <div class="prj-form-group">
+                            <label for="inputCustomCode" class="prj-label">Fitting / Equipment Code <span class="req">*</span></label>
+                            <input type="text" id="inputCustomCode" class="prj-input" placeholder="e.g. CUST-1, VAV-1, FAN-1" required>
+                        </div>
+                        <div class="prj-form-group" id="groupCustomInsertPos">
+                            <label for="selectCustomInsertPos" class="prj-label">Insert Position <span class="req">*</span></label>
+                            <select id="selectCustomInsertPos" class="prj-input">
+                                <option value="start">At the beginning (Row #1)</option>
+                                <option value="end" selected>At the end</option>
+                            </select>
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputCustomName" class="prj-label">Fitting / Equipment Description <span class="req">*</span></label>
+                            <input type="text" id="inputCustomName" class="prj-input" placeholder="e.g. VAV Box - Model XYZ, Sound Attenuator 900mm" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomDp" class="prj-label">Pressure Loss &Delta;P (<span id="lblCustomDpUnit">Pa</span>) <span class="req">*</span></label>
+                            <input type="number" step="0.1" min="0" id="inputCustomDp" class="prj-input" placeholder="e.g. 100.0" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomQty" class="prj-label">Quantity (Qty) <span class="req">*</span></label>
+                            <input type="number" min="1" step="1" value="1" id="inputCustomQty" class="prj-input" required>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="selectCustomShape" class="prj-label">Duct Shape <span class="opt-hint">(Optional)</span></label>
+                            <select id="selectCustomShape" class="prj-input">
+                                <option value="RECT" selected>RECT</option>
+                                <option value="ROUND">ROUND</option>
+                                <option value="FLAT OVAL">FLAT OVAL</option>
+                                <option value="Other">Other</option>
+                                <option value="N/A">N/A</option>
+                            </select>
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomDims" class="prj-label">Dimensions <span class="opt-hint">(Optional)</span></label>
+                            <input type="text" id="inputCustomDims" class="prj-input" placeholder="e.g. 600×400 mm, Ø350 mm">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomQ" class="prj-label">Design Airflow Q (<span id="lblCustomFlowUnit">L/s</span>) <span class="opt-hint">(Optional)</span></label>
+                            <input type="number" step="any" min="0" id="inputCustomQ" class="prj-input" placeholder="e.g. 500">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomV" class="prj-label">Duct Velocity V (<span id="lblCustomVelUnit">m/s</span>) <span class="opt-hint">(Optional)</span></label>
+                            <input type="number" step="any" min="0" id="inputCustomV" class="prj-input" placeholder="e.g. 2.5">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomMfr" class="prj-label">Manufacturer <span class="opt-hint">(Optional)</span></label>
+                            <input type="text" id="inputCustomMfr" class="prj-input" placeholder="e.g. Trox, Systemair, Aldes">
+                        </div>
+                        <div class="prj-form-group">
+                            <label for="inputCustomModel" class="prj-label">Model / Part No. <span class="opt-hint">(Optional)</span></label>
+                            <input type="text" id="inputCustomModel" class="prj-input" placeholder="e.g. TVR-Easy, MP-100">
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label for="inputCustomRemarks" class="prj-label">Remarks / Specifications <span class="opt-hint">(Optional)</span></label>
+                            <textarea id="inputCustomRemarks" class="prj-textarea" rows="2" placeholder="e.g. Laboratory test report ref: TR-2026-B; acoustic casing included"></textarea>
+                        </div>
+                        <div class="prj-form-group prj-col-span-2">
+                            <label class="custom-template-save-chk" for="chkSaveCustomTemplate">
+                                <input type="checkbox" id="chkSaveCustomTemplate">
+                                <span>Save this equipment as a reusable template for future projects</span>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="modal-footer">
+                <div class="modal-footer-ref">Loss Source: Certified Manufacturer Data (Non-ASHRAE)</div>
+                <div class="prj-modal-actions">
+                    <button type="button" id="btnCancelCustomFitting" class="modal-btn modal-btn-secondary">Cancel</button>
+                    <button type="button" id="btnSaveCustomFitting" class="modal-btn modal-btn-primary">➕ Add to Schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="prjToastNotification" class="prj-toast hidden"></div>
+
+    <script src="/static/katex/katex.min.js"></script>
+    <script src="/static/katex/auto-render.min.js"></script>
+    <script src="/static/js/app.js?v=1.0.12_archive"></script>
+    <script>
+        // Dynamically ensure version strictly matches Electron package/app version
+        if (window.electronAPI && typeof window.electronAPI.getVersion === 'function') {
+            window.electronAPI.getVersion().then(function(ver) {
+                if (ver) {
+                    document.title = 'DuctFit Pro v' + ver + ' - ASHRAE Fundamentals (Ch. 21)';
+                    var footer = document.getElementById('footerVersion');
+                    if (footer) footer.innerHTML = 'DuctFit Pro Version ' + ver + ' &bull; ASHRAE Fundamentals (Ch. 21)';
+                }
+            }).catch(function() {});
+        }
+    </script>
+</body>
+</html>
