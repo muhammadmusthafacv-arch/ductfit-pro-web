@@ -4,6 +4,26 @@ import re
 import time
 from datetime import datetime
 
+def _match_project(p, project_id):
+    if not p or not project_id:
+        return False
+    pid = str(project_id).strip()
+    pid_clean = pid.replace(" ", "-").upper()
+    p_id = str(p.get("id", "")).strip().upper()
+    p_code = str(p.get("code", "")).strip().upper()
+    p_clean = p_code.replace(" ", "-")
+    return p_id == pid.upper() or p_code == pid.upper() or p_clean == pid_clean or p_id == pid_clean
+
+def _match_fitting(f, fitting_id):
+    if not f or not fitting_id:
+        return False
+    fid = str(fitting_id).strip()
+    return (
+        str(f.get("id", "")).strip() == fid
+        or str(f.get("tag", "")).strip() == fid
+        or str(f.get("item_no", "")).strip() == fid
+    )
+
 def get_projects_file():
     user_data = os.environ.get("DUCTFIT_USER_DATA")
     if user_data:
@@ -170,7 +190,7 @@ def get_project(project_id):
     data = get_projects_data()
     pid_clean = str(project_id).replace(" ", "-")
     for p in data.get("projects", []):
-        if p.get("id") == project_id or p.get("code") == project_id or str(p.get("code", "")).replace(" ", "-") == pid_clean:
+        if _match_project(p, project_id):
             if p.get("fittings"):
                 renumber_fittings(p["fittings"])
             return p
@@ -214,7 +234,7 @@ def create_project(code, name, client="", contractor="", subcontractor="", notes
 def set_active_project(project_id):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             data["active_project_id"] = project_id
             save_projects_data(data)
             return True
@@ -224,7 +244,7 @@ def add_fitting_to_project(project_id, fitting_data):
     data = get_projects_data()
     target_project = None
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             target_project = p
             break
 
@@ -313,7 +333,7 @@ def duplicate_fitting_in_project(project_id, fitting_id):
     data = get_projects_data()
     target_project = None
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             target_project = p
             break
 
@@ -323,7 +343,7 @@ def duplicate_fitting_in_project(project_id, fitting_id):
     fittings = target_project.setdefault("fittings", [])
     source_fit = None
     for f in fittings:
-        if f.get("id") == fitting_id:
+        if _match_fitting(f, fitting_id):
             source_fit = f
             break
 
@@ -345,10 +365,10 @@ def duplicate_fitting_in_project(project_id, fitting_id):
 def delete_fitting_from_project(project_id, fitting_id):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             fittings = p.get("fittings", [])
             initial_len = len(fittings)
-            p["fittings"] = [f for f in fittings if f.get("id") != fitting_id]
+            p["fittings"] = [f for f in fittings if not _match_fitting(f, fitting_id)]
             if len(p["fittings"]) < initial_len:
                 renumber_fittings(p["fittings"])
                 p["updated_at"] = _get_timestamp()
@@ -360,9 +380,9 @@ def update_fitting_qty(project_id, fitting_id, new_qty):
     data = get_projects_data()
     pid_clean = str(project_id).replace(" ", "-")
     for p in data.get("projects", []):
-        if p.get("id") == project_id or p.get("code") == project_id or str(p.get("code", "")).replace(" ", "-") == pid_clean:
+        if _match_project(p, project_id):
             for f in p.get("fittings", []):
-                if f.get("id") == fitting_id or f.get("tag") == fitting_id or str(f.get("item_no")) == str(fitting_id):
+                if _match_fitting(f, fitting_id):
                     try:
                         q = max(1, int(new_qty))
                         f["qty"] = q
@@ -377,9 +397,9 @@ def update_fitting_qty(project_id, fitting_id, new_qty):
 def update_fitting_in_project(project_id, fitting_id, fitting_data):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             for f in p.get("fittings", []):
-                if f.get("id") == fitting_id:
+                if _match_fitting(f, fitting_id):
                     try:
                         dp_val = float(fitting_data.get("dp", f.get("dp", 0)))
                         qty_val = max(1, int(fitting_data.get("qty", f.get("qty", 1))))
@@ -444,7 +464,7 @@ def reorder_fittings_in_project(project_id, source_index, target_index):
     """
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             fittings = p.get("fittings", [])
             n = len(fittings)
             if 0 <= source_index < n and 0 <= target_index < n:
@@ -461,7 +481,7 @@ def reorder_fittings_in_project(project_id, source_index, target_index):
 def clear_project_fittings(project_id):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             p["fittings"] = []
             p["updated_at"] = _get_timestamp()
             save_projects_data(data)
@@ -473,7 +493,7 @@ def add_duct_segment_to_project(project_id, segment_data):
     data = get_projects_data()
     target_project = None
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             target_project = p
             break
 
@@ -523,7 +543,7 @@ def add_duct_segment_to_project(project_id, segment_data):
 def delete_duct_segment_from_project(project_id, segment_id):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             segs = p.get("duct_segments", [])
             initial_len = len(segs)
             p["duct_segments"] = [s for s in segs if s.get("id") != segment_id]
@@ -538,7 +558,7 @@ def delete_duct_segment_from_project(project_id, segment_id):
 def clear_project_duct_segments(project_id):
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             p["duct_segments"] = []
             p["updated_at"] = _get_timestamp()
             save_projects_data(data)
@@ -560,7 +580,7 @@ def update_project(project_id, updates):
     """Update project metadata (code, name, client, contractor, subcontractor, notes, unit_system, design_margin)"""
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             for field in ["code", "name", "client", "contractor", "subcontractor", "notes", "unit_system"]:
                 if field in updates and updates[field] is not None:
                     p[field] = str(updates[field]).strip()
@@ -578,7 +598,7 @@ def update_project_margin(project_id, margin):
     """Update design safety margin in percentage (e.g. 10.0 for 10%)"""
     data = get_projects_data()
     for p in data.get("projects", []):
-        if p.get("id") == project_id:
+        if _match_project(p, project_id):
             try:
                 p["design_margin"] = max(0.0, float(margin))
             except (ValueError, TypeError):

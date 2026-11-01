@@ -10,6 +10,7 @@ dist/
 build/
 *.zip
 *.pdf
+!ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf
 .locked_stage_backup/
 
 # Large archive folders

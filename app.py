@@ -1046,6 +1046,10 @@ def download_master_catalog_pdf():
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route("/ASHRAE_Duct_Fitting_Database_Master_Catalog.pdf", methods=["GET"])
+def download_master_catalog_pdf_root():
+    return download_master_catalog_pdf()
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="DuctFit Pro Engine Server")
