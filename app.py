@@ -274,6 +274,19 @@ def create_project_route():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
+@app.route("/api/projects/sync", methods=["POST"])
+def sync_project_route():
+    """Upsert or sync a full project from client to server storage"""
+    try:
+        data = request.get_json() or {}
+        proj = data.get("project") or data
+        if not proj or not isinstance(proj, dict):
+            return jsonify({"status": "error", "message": "Invalid project data"}), 400
+        saved = project_manager.upsert_project(proj)
+        return jsonify({"status": "success", "data": saved})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 @app.route("/api/projects/select", methods=["POST"])
 def select_project_route():
     """Set active project"""
